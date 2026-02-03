@@ -13,13 +13,15 @@
 
 1. **Tauri 2.0**: Use `npm create tauri-app@latest` (NOT `cargo tauri init`)
 2. **Alloy Purity**: ZERO ethers-rs imports allowed
-3. **Security**: Origin verification, strict CSP, initialization_script injection
-4. **Debloat**: Phase 5 removes ALL Iced code
-5. **Process**: Follow "Analyze → Improve → Rebuild" (NOT copy-paste)
+3. **Multi-Chain Architecture**: Build with trait-based design from the start
+4. **Security**: Origin verification, strict CSP, initialization_script injection
+5. **Debloat**: Phase 5 removes ALL Iced code
+6. **Process**: Follow "Analyze → Improve → Rebuild" (NOT copy-paste)
 
 **Read First**: 
+- `CRITICAL-REQUIREMENTS.md` - Non-negotiable rules
+- `MULTI-CHAIN-ARCHITECTURE.md` - Multi-chain design (IMPORTANT!)
 - `tauri-2.0-specifics.md` - Tauri 2.0 requirements
-- `tauri-migration-rules.md` - Migration process
 - `requirements.md` - What we're building
 - `design.md` - How we're building it
 
@@ -65,12 +67,13 @@ This task list breaks down the Tauri migration into 5 phases:
   - Configure CI/CD (GitHub Actions for Tauri 2.0)
   - Set up testing framework
 
-- [ ] 1.1.4 Create project structure
-  - Create `src-tauri/src/controllers/` directory
-  - Create `src-tauri/src/commands/` directory
-  - Create `src-tauri/src/state/` directory
-  - Create `src-tauri/src/models/` directory
-  - Create `src-tauri/src/services/` directory
+- [ ] 1.1.4 Create project structure (Multi-Chain)
+  - Create `src-tauri/src/chains/` directory (chain adapters)
+  - Create `src-tauri/src/chains/evm/` directory (EVM adapter)
+  - Create `src-tauri/src/core/` directory (chain-agnostic wallet core)
+  - Create `src-tauri/src/commands/` directory (Tauri commands)
+  - Create `src-tauri/src/state/` directory (application state)
+  - Create `src-tauri/src/models/` directory (data types)
   - Add README.md files to each directory
 
 - [ ] 1.1.5 Verify Alloy-only dependencies
@@ -80,52 +83,117 @@ This task list breaks down the Tauri migration into 5 phases:
   - Document Alloy purity standard
 
 
-### 1.2 Copy & Refactor Controllers
+### 1.2 Define Multi-Chain Architecture
 
-- [ ] 1.2.1 Analyze current controllers
+- [ ] 1.2.1 Define ChainAdapter trait
+  - Create `src-tauri/src/chains/mod.rs`
+  - Define `ChainAdapter` trait with async methods:
+    - `get_balance(address: &str) -> Result<Balance>`
+    - `send_transaction(tx: ChainTransaction) -> Result<TxHash>`
+    - `sign_message(address: &str, message: &[u8]) -> Result<Signature>`
+    - `get_transactions(address: &str, limit: u32) -> Result<Vec<TxRecord>>`
+    - `estimate_fee(tx: &ChainTransaction) -> Result<Fee>`
+    - `validate_address(address: &str) -> Result<()>`
+    - `chain_info() -> ChainInfo`
+    - `chain_type() -> ChainType`
+  - Define chain-agnostic types (Balance, TxHash, Signature, Fee, etc.)
+  - Define ChainType enum (Evm, Stellar, Aptos, Solana, Bitcoin)
+  - Add comprehensive doc comments with examples
+
+- [ ] 1.2.2 Define chain-agnostic transaction types
+  - Create `src-tauri/src/chains/types.rs`
+  - Define `ChainTransaction` enum for all chain types
+  - Define `EvmTransaction` struct (for EVM chains)
+  - Define placeholder structs for future chains (Stellar, Aptos, etc.)
+  - Ensure type safety and clear documentation
+
+- [ ] 1.2.3 Analyze current controllers
   - Read `src/controllers/transaction.rs`
   - Read `src/controllers/network.rs`
   - Read `src/controllers/wallet.rs`
   - Read `src/controllers/price.rs`
-  - Identify improvement opportunities
+  - Identify what can be chain-agnostic vs chain-specific
   - Document problems and solutions
 
-- [ ] 1.2.2 Refactor TransactionController (PRIORITY - Verify Alloy purity)
-  - Copy to `src-tauri/src/controllers/transaction.rs`
-  - **CRITICAL**: Verify uses ONLY alloy::primitives (Address, U256, Bytes)
+### 1.3 Implement EVM Adapter (Using Alloy)
+
+- [ ] 1.3.1 Create EVM adapter structure
+  - Create `src-tauri/src/chains/evm/mod.rs`
+  - Create `src-tauri/src/chains/evm/adapter.rs`
+  - Define `EvmAdapter` struct with Alloy provider and signer
+  - **CRITICAL**: Use ONLY alloy::primitives (Address, U256, Bytes)
   - **CRITICAL**: Verify NO ethers imports
+
+- [ ] 1.3.2 Implement ChainAdapter for EvmAdapter
+  - Implement `get_balance()` using Alloy provider
+  - Implement `send_transaction()` using Alloy
+  - Implement `sign_message()` using Alloy signer
+  - Implement `get_transactions()` (use RPC or explorer API)
+  - Implement `estimate_fee()` using Alloy gas estimation
+  - Implement `validate_address()` using Alloy address parsing
+  - Implement `chain_info()` and `chain_type()`
+  - Add comprehensive error handling
+  - Add doc comments with examples
+
+- [ ] 1.3.3 Refactor TransactionController logic into EvmAdapter
+  - Copy transaction logic from `src/controllers/transaction.rs`
+  - Adapt to use Alloy (not ethers)
   - Improve error handling
-  - Add comprehensive doc comments
   - Simplify complex logic
   - Add usage examples
   - Verify tests pass
 
-- [ ] 1.2.3 Refactor NetworkController
-  - Copy to `src-tauri/src/controllers/network.rs`
-  - Improve error handling
+- [ ] 1.3.4 Implement EVM network configuration
+  - Create `src-tauri/src/chains/evm/networks.rs`
+  - Define EVM network configs (Ethereum, PulseChain, Polygon, etc.)
+  - Add RPC URLs, chain IDs, explorers
+  - Make it easy to add new EVM chains
+
+- [ ] 1.3.5 Add EVM utilities
+  - Create `src-tauri/src/chains/evm/utils.rs`
+  - Add helper functions for EVM-specific operations
+  - Format units, parse units, etc.
+  - All using Alloy types
+
+### 1.4 Implement Chain-Agnostic Wallet Core
+
+- [ ] 1.4.1 Create WalletState (manages all adapters)
+  - Create `src-tauri/src/core/wallet.rs`
+  - Define `WalletState` struct with HashMap of adapters
+  - Implement adapter registration
+  - Implement `get_adapter(chain: &ChainType)` method
+  - Implement chain-agnostic wallet operations
   - Add comprehensive doc comments
-  - Simplify complex logic
+
+- [ ] 1.4.2 Implement multi-chain account management
+  - Create `src-tauri/src/core/account.rs`
+  - Define `Account` struct with multi-chain support
+  - Each account can have addresses on multiple chains
+  - Implement account creation, import, export
+  - Support HD wallet derivation for multiple chains
+
+- [ ] 1.4.3 Refactor WalletController logic
+  - Copy wallet logic from `src/controllers/wallet.rs`
+  - Make it chain-agnostic (uses ChainAdapter trait)
+  - Improve error handling
   - Add usage examples
   - Verify tests pass
 
-- [ ] 1.2.4 Refactor WalletController
-  - Copy to `src-tauri/src/controllers/wallet.rs`
+- [ ] 1.4.4 Refactor NetworkController logic
+  - Copy network logic from `src/controllers/network.rs`
+  - Make it work with multiple chain types
   - Improve error handling
-  - Add comprehensive doc comments
-  - Simplify complex logic
   - Add usage examples
   - Verify tests pass
 
-- [ ] 1.2.5 Refactor PriceController
-  - Copy to `src-tauri/src/controllers/price.rs`
+- [ ] 1.4.5 Refactor PriceController logic
+  - Copy price logic from `src/controllers/price.rs`
+  - Make it work with multiple chains
   - Improve error handling
-  - Add comprehensive doc comments
-  - Simplify complex logic
   - Add usage examples
   - Verify tests pass
 
-
-### 1.3 Copy Supporting Modules
+### 1.5 Copy Supporting Modules
 
 - [ ] 1.3.1 Copy network module
   - Copy `src/network/` → `src-tauri/src/network/`
