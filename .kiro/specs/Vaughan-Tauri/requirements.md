@@ -186,6 +186,18 @@ Ethereum Network
 - dApps cannot access private keys
 - Transaction approval required for all dApp requests
 
+**US-11**: As a user, I want sound alerts for important events so that I'm notified of transactions and activity.
+
+**Acceptance Criteria**:
+- Sound plays when incoming transaction detected
+- Sound plays when transaction confirmed
+- Sound plays when dApp requests action
+- Can enable/disable sound alerts
+- Can adjust volume
+- Can choose sound pack
+- Sounds work on all platforms (desktop + mobile)
+- Privacy-preserving (local monitoring by default)
+
 ---
 
 ## 3. Functional Requirements
@@ -239,6 +251,12 @@ Ethereum Network
 - `change_password` - Change wallet password
 - `verify_password` - Verify password without unlocking
 
+**FR-8**: Sound Alert Commands
+- `play_sound` - Play a sound alert
+- `update_sound_config` - Update sound configuration
+- `get_sound_config` - Get current sound configuration
+- `test_sound` - Test a sound alert
+
 ### 3.2 Frontend (Web)
 
 **FR-8**: MetaMask API Provider
@@ -261,7 +279,16 @@ Ethereum Network
   - `disconnect` - Wallet disconnected
 - Translate MetaMask API → Tauri commands
 
-**FR-9**: Wallet UI (Recreate Iced Design)
+**FR-9**: Sound Alert System
+- Play sound alerts for transaction events
+- Play sound alerts for balance changes
+- Play sound alerts for dApp requests
+- Configurable per-chain and per-account
+- Volume control and sound pack selection
+- Privacy-preserving local monitoring
+- Cross-platform audio playback (desktop + mobile)
+
+**FR-10**: Wallet UI (Recreate Iced Design)
 - Match current Iced GUI layout
 - Same visual design language
 - Main wallet view with:
@@ -275,7 +302,7 @@ Ethereum Network
 - Same button styles and interactions
 - Responsive for desktop and mobile
 
-**FR-10**: dApp Browser Integration
+**FR-11**: dApp Browser Integration
 - **Option A**: Separate window (like a browser)
   - Opens in new Tauri window
   - Independent from wallet window
@@ -291,7 +318,7 @@ Ethereum Network
 - Error handling
 - Security indicators
 
-**FR-11**: Main Wallet View
+**FR-12**: Main Wallet View
 - Display current network (with icon)
 - Display active account address (truncated, copyable)
 - Display native token balance (large, prominent)
@@ -304,7 +331,7 @@ Ethereum Network
 - Settings link
 - dApp browser access button/link
 
-**FR-12**: Send Transaction View
+**FR-13**: Send Transaction View
 - Recipient address input (with validation)
 - Amount input (with balance check)
 - Gas limit input (with estimation)
@@ -314,19 +341,19 @@ Ethereum Network
 - Transaction status feedback
 - Support for dApp-initiated transactions
 
-**FR-13**: Receive View
+**FR-14**: Receive View
 - Display QR code for active address
 - Display address as text (copyable)
 - Share button
 
-**FR-14**: Transaction History View
+**FR-15**: Transaction History View
 - List recent transactions
 - Show transaction details (hash, amount, status)
 - Link to block explorer
 - Filter by status/type
 - Show dApp origin for dApp transactions
 
-**FR-15**: Approval Management
+**FR-16**: Approval Management
 - Pending approvals queue
 - Approve/reject interface
 - Transaction details display
@@ -334,17 +361,18 @@ Ethereum Network
 - Risk warnings for suspicious transactions
 - Batch approval for multiple requests
 
-**FR-16**: Settings View
+**FR-17**: Settings View
 - Network management (add/remove/edit)
 - Account management (import/export/delete)
 - Security settings (password, auto-lock)
 - dApp permissions management
 - Display settings (currency, language)
+- Sound alert settings (enable/disable, volume, sound pack)
 - About/version info
 
 ### 3.3 dApp Integration
 
-**FR-17**: Connection Management
+**FR-18**: Connection Management
 - `request_connection` - dApp requests connection
 - `approve_connection` - User approves connection
 - `reject_connection` - User rejects connection
@@ -352,7 +380,7 @@ Ethereum Network
 - `get_connected_dapps` - List connected dApps
 - `get_dapp_permissions` - Get dApp permissions
 
-**FR-18**: Transaction Approval
+**FR-19**: Transaction Approval
 - `request_transaction_approval` - dApp requests transaction
 - `approve_transaction` - User approves transaction
 - `reject_transaction` - User rejects transaction
@@ -360,14 +388,14 @@ Ethereum Network
 - Display transaction details to user
 - Show dApp origin and reputation
 
-**FR-19**: Message Signing
+**FR-20**: Message Signing
 - `request_message_signature` - dApp requests message signature
 - `approve_signature` - User approves signature
 - `reject_signature` - User rejects signature
 - Support multiple signature types (personal, typed data)
 - Display message content to user
 
-**FR-20**: Network Management for dApps
+**FR-21**: Network Management for dApps
 - `request_network_switch` - dApp requests network switch
 - `request_network_add` - dApp requests adding network
 - User approval required for network changes
@@ -375,7 +403,7 @@ Ethereum Network
 
 ### 3.4 Data Management
 
-**FR-21**: Persistent Storage
+**FR-22**: Persistent Storage
 - Store wallet data in secure location
 - Store network configurations
 - Store account metadata (not private keys)
@@ -384,7 +412,7 @@ Ethereum Network
 - Store connection history
 - Encrypt sensitive data
 
-**FR-22**: State Synchronization
+**FR-23**: State Synchronization
 - Frontend state syncs with backend
 - Balance updates propagate to UI
 - Network changes update UI immediately

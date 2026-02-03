@@ -318,6 +318,15 @@ This task list breaks down the Tauri migration into 5 phases:
   - Add comprehensive doc comments
   - Add tests for each command
 
+- [ ] 1.5.7 Implement sound alert commands
+  - Create `src-tauri/src/commands/audio.rs`
+  - Implement `play_sound` command
+  - Implement `update_sound_config` command
+  - Implement `get_sound_config` command
+  - Implement `test_sound` command
+  - Add comprehensive doc comments
+  - Add tests for each command
+
 
 ### 1.6 Integration & Testing
 
@@ -455,6 +464,16 @@ This task list breaks down the Tauri migration into 5 phases:
   - Add tests
   - Add README with usage
 
+- [ ] 2.3.7 Create SoundSettings component
+  - Create `web/src/components/SoundSettings/`
+  - Enable/disable toggle
+  - Volume slider
+  - Sound pack selector
+  - Test sound buttons
+  - Match Iced styling
+  - Add tests
+  - Add README with usage
+
 
 ### 2.4 View Components
 
@@ -512,6 +531,7 @@ This task list breaks down the Tauri migration into 5 phases:
   - Network management
   - Account management
   - Security settings
+  - Sound alert settings (integrate SoundSettings component)
   - Display settings
   - About/version info
   - Add tests
@@ -532,20 +552,30 @@ This task list breaks down the Tauri migration into 5 phases:
   - Implement loading states
   - Test all interactions
 
-- [ ] 2.5.3 Test on desktop
+- [ ] 2.5.3 Implement basic sound alert system
+  - Add `rodio` dependency to src-tauri/Cargo.toml
+  - Create `src-tauri/src/audio/mod.rs` (SoundPlayer struct)
+  - Implement sound playback using rodio
+  - Add default sound assets to `src-tauri/sounds/default/`
+  - Wire up sound commands
+  - Test sound playback on desktop
+  - Document for Phase 3 (full monitoring)
+
+- [ ] 2.5.4 Test on desktop
   - Test on Windows (primary platform)
   - Test all wallet features
   - Test all views
   - Test navigation
+  - Test basic sound alerts
   - Fix bugs
 
-- [ ] 2.5.4 Test basic mobile responsiveness
+- [ ] 2.5.5 Test basic mobile responsiveness
   - Test responsive layouts
   - Test touch targets
   - Identify mobile-specific issues
   - Document for Phase 4
 
-- [ ] 2.5.5 Code quality review
+- [ ] 2.5.6 Code quality review
   - Run ESLint
   - Run Prettier
   - Review component structure
@@ -732,9 +762,34 @@ This task list breaks down the Tauri migration into 5 phases:
   - Fix any issues
 
 
-### 3.5 Real dApp Testing
+### 3.5 Sound Alert Monitoring (Full Implementation)
 
-- [ ] 3.5.1 Test with Uniswap
+- [ ] 3.5.1 Implement transaction monitoring
+  - Create `src-tauri/src/monitoring/transaction_monitor.rs`
+  - Implement TransactionMonitor struct
+  - Add address watching functionality
+  - Implement background monitoring loop (check every 15s)
+  - Detect new transactions
+  - Emit events to frontend
+  - Add tests
+
+- [ ] 3.5.2 Integrate sound alerts with monitoring
+  - Play sound on incoming transaction
+  - Play sound on transaction confirmation
+  - Play sound on dApp request
+  - Add per-chain configuration
+  - Add per-account configuration
+  - Test monitoring on all platforms
+
+- [ ] 3.5.3 Add system notifications (optional)
+  - Install tauri-plugin-notification
+  - Show system notification on transaction
+  - Show system notification on dApp request
+  - Test on all platforms
+
+### 3.6 Real dApp Testing
+
+- [ ] 3.6.1 Test with Uniswap
   - Open Uniswap in dApp browser
   - Test connection
   - Test token swap approval
@@ -742,7 +797,7 @@ This task list breaks down the Tauri migration into 5 phases:
   - Document any issues
   - Fix compatibility issues
 
-- [ ] 3.5.2 Test with Aave
+- [ ] 3.6.2 Test with Aave
   - Open Aave in dApp browser
   - Test connection
   - Test deposit/borrow approval
@@ -750,7 +805,7 @@ This task list breaks down the Tauri migration into 5 phases:
   - Document any issues
   - Fix compatibility issues
 
-- [ ] 3.5.3 Test with OpenSea
+- [ ] 3.6.3 Test with OpenSea
   - Open OpenSea in dApp browser
   - Test connection
   - Test NFT listing approval
@@ -758,14 +813,14 @@ This task list breaks down the Tauri migration into 5 phases:
   - Document any issues
   - Fix compatibility issues
 
-- [ ] 3.5.4 Test with additional dApps
+- [ ] 3.6.4 Test with additional dApps
   - Test with Curve
   - Test with 1inch
   - Test with other popular dApps
   - Document compatibility
   - Fix any issues
 
-- [ ] 3.5.5 Code quality review
+- [ ] 3.6.5 Code quality review
   - Review dApp integration code
   - Check against EIP-1193 spec
   - Verify security measures
