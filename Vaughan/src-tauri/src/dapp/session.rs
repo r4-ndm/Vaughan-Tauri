@@ -42,6 +42,9 @@ pub struct DappConnection {
 
     /// Last activity timestamp (Unix timestamp)
     pub last_activity: u64,
+
+    /// Auto-approved connection (wallet opened the dApp)
+    pub auto_approved: bool,
 }
 
 /// Session manager for dApp connections
@@ -98,6 +101,7 @@ impl SessionManager {
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_secs(),
+            auto_approved: false, // Default: manual connection
         };
 
         let key = (window_label.to_string(), origin.to_string());
@@ -325,6 +329,66 @@ impl SessionManager {
             now - session.last_activity < 86400
         });
     }
+
+    /// Create auto-approved session for wallet-opened dApp
+    ///
+    /// Used when wallet opens a whitelisted dApp - connection is pre-approved
+    /// because user intent is clear (they clicked "Open dApp" in wallet).
+    ///
+    /// # Arguments
+    ///
+    /// * `window_label` - Unique window identifier
+    /// * `origin` - dApp origin
+    /// * `name` - dApp name (optional)
+    /// * `icon` - dApp icon URL (optional)
+    /// * `accounts` - Connected accounts
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` - Session created
+    /// * `Err(WalletError)` - Failed to create session
+    ///
+    /// # Security
+    ///
+    /// This is safe because:
+    /// - Wallet controls which dApps can be opened (whitelist)
+    /// - User explicitly clicked "Open dApp" (clear intent)
+    /// - Connection only reveals address (no private keys)
+    /// - Transactions still require approval
+    pub async fn create_auto_approved_session(
+        &self,
+        window_label: &str,
+        origin: &str,
+        name: Option<String>,
+        icon: Option<String>,
+        accounts: Vec<Address>,
+    ) -> Result<(), WalletError> {
+        let mut sessions = self.sessions.write().await;
+
+        eprintln!("[SessionManager] Creating AUTO-APPROVED session for window: {}, origin: {}", window_label, origin);
+
+        let connection = DappConnection {
+            window_label: window_label.to_string(),
+            origin: origin.to_string(),
+            name,
+            icon,
+            accounts,
+            connected_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+            last_activity: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+            auto_approved: true, // Mark as auto-approved
+        };
+
+        let key = (window_label.to_string(), origin.to_string());
+        sessions.insert(key, connection);
+        eprintln!("[SessionManager] Auto-approved session created. Total sessions: {}", sessions.len());
+        Ok(())
+    }
 }
 
 impl Default for SessionManager {
@@ -550,5 +614,60 @@ mod tests {
         assert_eq!(labels.len(), 2);
         assert!(labels.contains(&"window-1".to_string()));
         assert!(labels.contains(&"window-2".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_auto_approved_session() {
+        let manager = SessionManager::new();
+        let window_label = "dapp-window-1";
+        let origin = "https://app.uniswap.org";
+        let accounts = vec![Address::ZERO];
+
+        // Create auto-approved session
+        manager
+            .create_auto_approved_session(
+                window_label,
+                origin,
+                Some("Uniswap".to_string()),
+                None,
+                accounts.clone(),
+            )
+            .await
+            .unwrap();
+
+        // Get session
+        let session = manager.get_session_by_window(window_label, origin).await.unwrap();
+        
+        // Verify it's marked as auto-approved
+        assert_eq!(session.auto_approved, true);
+        assert_eq!(session.window_label, window_label);
+        assert_eq!(session.origin, origin);
+        assert_eq!(session.accounts, accounts);
+    }
+
+    #[tokio::test]
+    async fn test_manual_vs_auto_approved() {
+        let manager = SessionManager::new();
+        let origin = "https://app.uniswap.org";
+
+        // Create manual session
+        manager
+            .create_session_for_window("window-1", origin, None, None, vec![])
+            .await
+            .unwrap();
+
+        // Create auto-approved session
+        manager
+            .create_auto_approved_session("window-2", origin, None, None, vec![])
+            .await
+            .unwrap();
+
+        // Check manual session
+        let manual = manager.get_session_by_window("window-1", origin).await.unwrap();
+        assert_eq!(manual.auto_approved, false);
+
+        // Check auto-approved session
+        let auto = manager.get_session_by_window("window-2", origin).await.unwrap();
+        assert_eq!(auto.auto_approved, true);
     }
 }

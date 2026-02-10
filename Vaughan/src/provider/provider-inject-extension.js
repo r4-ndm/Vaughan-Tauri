@@ -36,17 +36,19 @@
       this.reconnectAttempts = 0;
       this.maxReconnectAttempts = 5;
       this.reconnectDelay = 1000;
+      this.portRange = [8766, 8800]; // Try ports in this range
+      this.currentPort = this.portRange[0];
       
       this.connect();
     }
 
-    connect() {
+    async connect() {
       try {
-        console.log('[Vaughan-Ext] Connecting to WebSocket...');
-        this.ws = new WebSocket('ws://localhost:8766');
+        console.log(`[Vaughan-Ext] Connecting to WebSocket on port ${this.currentPort}...`);
+        this.ws = new WebSocket(`ws://localhost:${this.currentPort}`);
         
         this.ws.onopen = () => {
-          console.log('[Vaughan-Ext] Connected! ✅');
+          console.log(`[Vaughan-Ext] Connected to port ${this.currentPort}! ✅`);
           this.isConnected = true;
           this.reconnectAttempts = 0;
         };
@@ -75,6 +77,13 @@
         
         this.ws.onerror = (error) => {
           console.error('[Vaughan-Ext] WebSocket error:', error);
+          
+          // Try next port if connection failed
+          if (!this.isConnected && this.currentPort < this.portRange[1]) {
+            this.currentPort++;
+            console.log(`[Vaughan-Ext] Trying next port: ${this.currentPort}`);
+            setTimeout(() => this.connect(), 100);
+          }
         };
         
         this.ws.onclose = () => {

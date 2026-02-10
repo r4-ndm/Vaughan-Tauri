@@ -146,7 +146,7 @@ pub async fn open_dapp_window(
         &window_label,
         window_url,
     )
-    .title(title.unwrap_or_else(|| "Vaughan - dApp".to_string()))
+    .title(title.clone().unwrap_or_else(|| "Vaughan - dApp".to_string()))
     .inner_size(1200.0, 800.0)
     .min_inner_size(800.0, 600.0)
     .resizable(true)
@@ -162,6 +162,37 @@ pub async fn open_dapp_window(
         .map_err(|e| format!("Failed to register window: {}", e))?;
 
     eprintln!("[Window] Window registered: {} -> {}", window_label, origin);
+
+    // ========================================================================
+    // AUTO-CONNECT: Pre-approve connection for wallet-opened dApps
+    // ========================================================================
+    // This is safe because:
+    // 1. Wallet controls which dApps can be opened (whitelist)
+    // 2. User explicitly clicked "Open dApp" (clear intent)
+    // 3. Connection only reveals address (no private keys)
+    // 4. Transactions still require approval
+    
+    // Get active account
+    if let Ok(account) = state.active_account().await {
+        eprintln!("[Window] Creating auto-approved session for account: {:?}", account);
+        
+        // Create auto-approved session
+        if let Err(e) = state.session_manager.create_auto_approved_session(
+            &window_label,
+            &origin,
+            title,
+            None, // icon
+            vec![account],
+        ).await {
+            eprintln!("[Window] Warning: Failed to create auto-approved session: {}", e);
+            // Don't fail window creation if session creation fails
+        } else {
+            eprintln!("[Window] Auto-approved session created successfully");
+        }
+    } else {
+        eprintln!("[Window] Warning: No active account, skipping auto-connect");
+    }
+
     eprintln!("[Window] Window opened successfully: {}", window_label);
     
     Ok(window_label)

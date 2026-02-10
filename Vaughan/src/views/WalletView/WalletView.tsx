@@ -244,7 +244,6 @@ export function WalletView() {
             <ActionButtons
               onSend={handleSend}
               onReceive={handleReceive}
-              onDappBrowser={handleDappBrowser}
             />
             
             {/* dApp Browser Button */}

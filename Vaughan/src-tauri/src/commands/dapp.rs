@@ -197,14 +197,14 @@ pub async fn dapp_request(
     );
 
     // ========================================================================
-    // Layer 2: Rate Limiting (per window+origin)
+    // Layer 2: Rate Limiting (per window+origin+method)
     // ========================================================================
 
     // Create rate limit key (window_label:origin)
     let rate_limit_key = format!("{}:{}", window_label, origin);
     
-    if let Err(e) = state.rate_limiter.check_limit(&rate_limit_key).await {
-        eprintln!("[dapp_request] Rate limit exceeded: {}", rate_limit_key);
+    if let Err(e) = state.rate_limiter.check_limit(&rate_limit_key, &request.method).await {
+        eprintln!("[dapp_request] Rate limit exceeded: {} for method {}", rate_limit_key, request.method);
         return Ok(DappResponse {
             id: request.id,
             result: None,
@@ -565,3 +565,87 @@ pub async fn clear_all_approvals(
 
 
 
+
+// ============================================================================
+// WebSocket Management Commands
+// ============================================================================
+
+/// Get WebSocket server port
+///
+/// Returns the dynamically assigned WebSocket server port.
+/// Provider scripts can use this to discover the correct port to connect to.
+///
+/// # Arguments
+///
+/// * `state` - Application state
+///
+/// # Returns
+///
+/// * `Ok(u16)` - WebSocket server port
+/// * `Err(String)` - WebSocket server not started
+///
+/// # Example
+///
+/// ```typescript
+/// const port = await invoke('get_websocket_port');
+/// const ws = new WebSocket(`ws://localhost:${port}`);
+/// ```
+#[tauri::command]
+pub async fn get_websocket_port(
+    state: State<'_, VaughanState>,
+) -> Result<u16, String> {
+    state.get_websocket_port()
+        .await
+        .ok_or_else(|| "WebSocket server not started".to_string())
+}
+
+/// Get WebSocket server health metrics
+///
+/// Returns current health metrics including connection counts, message counts,
+/// errors, and uptime.
+///
+/// # Arguments
+///
+/// * `state` - Application state
+///
+/// # Returns
+///
+/// * `Ok(HealthMetrics)` - Current health metrics
+///
+/// # Example
+///
+/// ```typescript
+/// const health = await invoke('get_websocket_health');
+/// console.log(`Active connections: ${health.active_connections}`);
+/// console.log(`Messages processed: ${health.messages_processed}`);
+/// console.log(`Uptime: ${health.uptime_seconds}s`);
+/// ```
+#[tauri::command]
+pub async fn get_websocket_health(
+    state: State<'_, VaughanState>,
+) -> Result<crate::dapp::HealthMetrics, String> {
+    let port = state.get_websocket_port().await;
+    Ok(state.health_monitor.get_metrics(port))
+}
+
+/// Get performance profiling statistics
+///
+/// Returns performance statistics for all RPC methods including
+/// average, min, max durations and request counts.
+///
+/// # Frontend Usage
+///
+/// ```typescript
+/// import { invoke } from '@tauri-apps/api/tauri';
+///
+/// const stats = await invoke('get_performance_stats');
+/// for (const [method, stat] of Object.entries(stats)) {
+///   console.log(`${method}: avg=${stat.avg}ms, count=${stat.count}`);
+/// }
+/// ```
+#[tauri::command]
+pub async fn get_performance_stats(
+    state: State<'_, VaughanState>,
+) -> Result<std::collections::HashMap<String, crate::dapp::MethodStats>, String> {
+    Ok(state.profiler.get_stats().await)
+}

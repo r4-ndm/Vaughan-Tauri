@@ -46,3 +46,7 @@ rand = "0.8"              # Secure random number generation
 base64ct = { version = "1.6", features = ["alloc"] }  # Base64 encoding
 hex = "0.4"               # Hex encoding/decoding
 
+# Logging dependencies (Task 3.1)
+tracing = "0.1"           # Structured logging framework
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }  # Log subscriber with filtering
+

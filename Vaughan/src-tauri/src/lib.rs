@@ -238,6 +238,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            // Initialize structured logging
+            dapp::logging::init_logging();
+            
             // Initialize production VaughanState
             println!("🚀 Initializing Vaughan Wallet...");
             
@@ -262,119 +265,14 @@ pub fn run() {
             println!("✅ Proxy server started on http://localhost:8765");
 
             // Start WebSocket server for external dApp communication
-            println!("🔌 Starting WebSocket server...");
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                use tokio::net::TcpListener;
-                use tokio_tungstenite::accept_async;
-                use futures_util::{StreamExt, SinkExt};
-                
-                match TcpListener::bind("127.0.0.1:8766").await {
-                    Ok(listener) => {
-                        println!("✅ WebSocket server started on ws://127.0.0.1:8766");
-                        
-                        loop {
-                            match listener.accept().await {
-                                Ok((stream, addr)) => {
-                                    println!("[WebSocket] New connection from: {}", addr);
-                                    let app_handle_clone = app_handle.clone();
-                                    
-                                    tokio::spawn(async move {
-                                        // Get state from app handle
-                                        let state = app_handle_clone.state::<state::VaughanState>();
-                                        let state_ref: &state::VaughanState = &*state;
-                                        
-                                        match accept_async(stream).await {
-                                            Ok(ws_stream) => {
-                                                let (mut write, mut read) = ws_stream.split();
-                                                
-                                                while let Some(msg_result) = read.next().await {
-                                                    match msg_result {
-                                                        Ok(msg) => {
-                                                            if let tokio_tungstenite::tungstenite::Message::Text(text) = msg {
-                                                                println!("[WebSocket] Received: {}", text);
-                                                                
-                                                                // Parse JSON-RPC request
-                                                                match serde_json::from_str::<serde_json::Value>(&text) {
-                                                                    Ok(request) => {
-                                                                        let id = request["id"].clone();
-                                                                        let method = request["method"].as_str().unwrap_or("");
-                                                                        let params = request["params"].as_array().cloned().unwrap_or_default();
-                                                                        
-                                                                        // Process request using existing RPC handler
-                                                                        // Use "websocket" as window_label and "external" as origin
-                                                                        let result = dapp::rpc_handler::handle_request(
-                                                                            state_ref,
-                                                                            "websocket",
-                                                                            "external",
-                                                                            method,
-                                                                            params
-                                                                        ).await;
-                                                                        
-                                                                        // Build response
-                                                                        let response = match result {
-                                                                            Ok(value) => serde_json::json!({
-                                                                                "id": id,
-                                                                                "jsonrpc": "2.0",
-                                                                                "result": value
-                                                                            }),
-                                                                            Err(e) => serde_json::json!({
-                                                                                "id": id,
-                                                                                "jsonrpc": "2.0",
-                                                                                "error": {
-                                                                                    "code": -32000,
-                                                                                    "message": e.to_string()
-                                                                                }
-                                                                            })
-                                                                        };
-                                                                        
-                                                                        println!("[WebSocket] Response: {}", response);
-                                                                        
-                                                                        // Send response
-                                                                        let _ = write.send(tokio_tungstenite::tungstenite::Message::Text(
-                                                                            response.to_string()
-                                                                        )).await;
-                                                                    }
-                                                                    Err(e) => {
-                                                                        println!("[WebSocket] Failed to parse request: {}", e);
-                                                                        let error_response = serde_json::json!({
-                                                                            "id": null,
-                                                                            "jsonrpc": "2.0",
-                                                                            "error": {
-                                                                                "code": -32700,
-                                                                                "message": "Parse error"
-                                                                            }
-                                                                        });
-                                                                        let _ = write.send(tokio_tungstenite::tungstenite::Message::Text(
-                                                                            error_response.to_string()
-                                                                        )).await;
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                        Err(e) => {
-                                                            println!("[WebSocket] Error receiving message: {}", e);
-                                                            break;
-                                                        }
-                                                    }
-                                                }
-                                                
-                                                println!("[WebSocket] Connection closed: {}", addr);
-                                            }
-                                            Err(e) => {
-                                                println!("[WebSocket] Failed to accept connection: {}", e);
-                                            }
-                                        }
-                                    });
-                                }
-                                Err(e) => {
-                                    println!("[WebSocket] Failed to accept connection: {}", e);
-                                }
-                            }
-                        }
+                match dapp::websocket::start_websocket_server(app_handle).await {
+                    Ok(port) => {
+                        println!("✅ WebSocket server started on ws://127.0.0.1:{}", port);
                     }
                     Err(e) => {
-                        println!("❌ Failed to start WebSocket server: {}", e);
+                        eprintln!("❌ Failed to start WebSocket server: {}", e);
                     }
                 }
             });
@@ -423,6 +321,9 @@ pub fn run() {
             commands::dapp::respond_to_approval,
             commands::dapp::cancel_approval,
             commands::dapp::clear_all_approvals,
+            commands::dapp::get_websocket_port,
+            commands::dapp::get_websocket_health,
+            commands::dapp::get_performance_stats,
             // Window Commands (6) - Phase 3.2 + 3.4 + 3.7
             commands::window::open_dapp_browser,
             commands::window::open_dapp_url,

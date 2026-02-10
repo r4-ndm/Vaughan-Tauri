@@ -75,16 +75,25 @@ async fn handle_request_accounts(
     window_label: &str,
     origin: &str,
 ) -> Result<Value, WalletError> {
-    // Check if already connected for this window
+    // Check if already connected for this window (including auto-approved)
     if let Some(connection) = state.session_manager.get_session_by_window(window_label, origin).await {
-        // Return connected accounts
+        eprintln!("[RPC] Found existing session for window: {}, auto_approved: {}", window_label, connection.auto_approved);
+        
+        // Return connected accounts immediately
         let accounts: Vec<String> = connection
             .accounts
             .iter()
             .map(|addr| format!("{:?}", addr))
             .collect();
+        
+        if connection.auto_approved {
+            eprintln!("[RPC] Auto-approved session - returning accounts immediately: {:?}", accounts);
+        }
+        
         return Ok(serde_json::json!(accounts));
     }
+
+    eprintln!("[RPC] No existing session found - creating approval request");
 
     // Not connected - create approval request
     use crate::dapp::ApprovalRequestType;
@@ -112,7 +121,7 @@ async fn handle_request_accounts(
     // Get active account
     let account = state.active_account().await?;
 
-    // Create session for this window
+    // Create session for this window (manual approval, not auto-approved)
     state
         .session_manager
         .create_session_for_window(
@@ -123,6 +132,8 @@ async fn handle_request_accounts(
             vec![account],
         )
         .await?;
+
+    eprintln!("[RPC] Manual approval completed - session created");
 
     // Return accounts
     let accounts = vec![format!("{:?}", account)];
