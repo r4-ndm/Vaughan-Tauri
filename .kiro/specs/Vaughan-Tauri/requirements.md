@@ -704,7 +704,14 @@ Ethereum Network
 
 ### 6.3 Phased Approach
 
-**Phase 1: Backend Setup (Week 1)**
+**Phase 0: Proof of Concept (2-3 days) - RECOMMENDED**
+- Validate Tauri 2.0 + Alloy integration
+- Test controller lazy initialization
+- Test MetaMask provider injection
+- Achieve 100% confidence before Phase 1
+- See `PHASE-0-POC.md` for details
+
+**Phase 1: Backend Setup (Week 1.5)**
 - Create Tauri project structure (desktop + mobile config)
 - Copy controllers and business logic
 - Implement state management (`VaughanState`)
@@ -724,7 +731,7 @@ Ethereum Network
 
 **Phase 3: dApp Integration (Week 3)**
 - Implement MetaMask API provider
-- Create dApp browser (decide: separate window vs panel)
+- Create dApp browser (separate window)
 - Implement connection management
 - Create approval UI (matching Iced style)
 - Test with real dApps (Uniswap, etc.)
@@ -741,6 +748,9 @@ Ethereum Network
 - Documentation
 - Release preparation
 - Community call for macOS testers
+
+**Total Timeline**: 7.5 weeks (with Phase 0) or 7 weeks (without Phase 0)  
+**Recommendation**: Include Phase 0 for 100% confidence
 
 ---
 
@@ -999,11 +1009,23 @@ These can be added after migration:
 ---
 
 **Status**: Requirements complete - Alloy core + MetaMask translation + Rabby-inspired dApp browser  
-**Next Step**: Create design document with:
+**Confidence**: 95% (100% after Phase 0 POC)  
+**Next Step**: 
+- **Recommended**: Execute Phase 0 POC (see `PHASE-0-POC.md`) for 100% confidence
+- **Alternative**: Create design document (if skipping Phase 0)
+
+**Design Phase**: Create design document with:
 - UI mockups matching Iced design
-- dApp browser integration options (separate window vs panel)
+- dApp browser integration (separate window - decided)
 - Mobile layout adaptations
 - Detailed architecture diagrams
 - Implementation plan  
-**Estimated Effort**: 4 weeks (1 week per phase)  
+
+**Estimated Effort**: 7.5 weeks (with Phase 0) or 7 weeks (without Phase 0)  
 **Priority**: High (blocks Phase E completion + enables dApp ecosystem + mobile support)
+
+**See Also**:
+- `PATH-TO-100-PERCENT.md` - Why Phase 0 is recommended
+- `PHASE-0-POC.md` - Phase 0 detailed tasks
+- `CONCRETE-EXAMPLES.md` - Code examples
+- `RISK-REGISTER.md` - Risk analysis
