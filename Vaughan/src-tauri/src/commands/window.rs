@@ -15,12 +15,9 @@ use lazy_static::lazy_static;
 // ============================================================================
 
 lazy_static! {
-    /// Provider script for iframe mode (PostMessage communication)
-    static ref PROVIDER_SCRIPT: String = 
-        include_str!("../../../src/provider/provider-inject-native.js").to_string();
-    
     /// Provider script for extension-style mode (WebSocket communication, CSP bypass)
     /// This mimics how MetaMask works - injected before page loads, bypasses CSP
+    /// This is the ACTIVE provider implementation
     static ref PROVIDER_SCRIPT_EXTENSION: String = 
         include_str!("../../../src/provider/provider-inject-extension.js").to_string();
 }

@@ -168,7 +168,7 @@ export function useExternalWindowBridge() {
     window.addEventListener('vaughan-window-register', handleWindowRegister as EventListener);
 
     // Listen for provider requests (legacy)
-    window.addEventListener('vaughan-provider-request', handleProviderRequest as EventListener);
+    window.addEventListener('vaughan-provider-request', handleProviderRequest as unknown as EventListener);
 
     console.log('[ExternalWindowBridge] Event listeners active');
 
@@ -176,7 +176,7 @@ export function useExternalWindowBridge() {
     return () => {
       window.removeEventListener('message', handlePostMessage);
       window.removeEventListener('vaughan-window-register', handleWindowRegister as EventListener);
-      window.removeEventListener('vaughan-provider-request', handleProviderRequest as EventListener);
+      window.removeEventListener('vaughan-provider-request', handleProviderRequest as unknown as EventListener);
       windowsRef.current.clear();
       console.log('[ExternalWindowBridge] Event listeners removed');
     };

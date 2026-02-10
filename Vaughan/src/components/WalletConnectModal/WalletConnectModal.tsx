@@ -4,7 +4,7 @@
  * Displays QR code and connection status for WalletConnect
  */
 
-import { QRCodeSVG } from 'qrcode.react';
+// import { QRCodeSVG } from 'qrcode.react'; // Unused - WalletConnect removed
 import { XMarkIcon } from '@heroicons/react/24/outline';
 
 export interface WalletConnectModalProps {
@@ -19,7 +19,6 @@ export interface WalletConnectModalProps {
 }
 
 export function WalletConnectModal({
-  uri,
   connecting,
   dappUrl,
   onClose,

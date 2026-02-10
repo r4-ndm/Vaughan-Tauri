@@ -43,7 +43,6 @@ export function TransactionApproval({
   data,
   onApprove,
   onReject,
-  onClose,
 }: TransactionApprovalProps) {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);

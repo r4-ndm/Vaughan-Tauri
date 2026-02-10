@@ -24,7 +24,6 @@ export function ConnectionApproval({
   origin,
   onApprove,
   onReject,
-  onClose,
 }: ConnectionApprovalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

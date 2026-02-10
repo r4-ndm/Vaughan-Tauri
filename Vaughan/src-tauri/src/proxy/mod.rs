@@ -169,8 +169,8 @@ async fn proxy_handler(Query(params): Query<ProxyParams>) -> Response {
 ///
 /// * Modified HTML with provider script injected
 fn inject_provider_script(html: &str) -> String {
-    // Provider script for iframe mode (works with localhost origin)
-    let provider_script = include_str!("../../../src/provider/provider-inject.js");
+    // Provider script for extension-style mode (WebSocket-based, CSP bypass)
+    let provider_script = include_str!("../../../src/provider/provider-inject-extension.js");
 
     // Inject before </head>
     if let Some(pos) = html.find("</head>") {
