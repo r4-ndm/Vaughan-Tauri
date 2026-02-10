@@ -36,8 +36,22 @@
       this.reconnectAttempts = 0;
       this.maxReconnectAttempts = 5;
       this.reconnectDelay = 1000;
-      this.portRange = [8766, 8800]; // Try ports in this range
-      this.currentPort = this.portRange[0];
+      
+      // Check if port was injected by backend
+      console.log('[Vaughan-Ext] Checking for injected port...');
+      console.log('[Vaughan-Ext] window.__VAUGHAN_WS_PORT__ =', window.__VAUGHAN_WS_PORT__);
+      console.log('[Vaughan-Ext] window.__VAUGHAN_WINDOW_LABEL__ =', window.__VAUGHAN_WINDOW_LABEL__);
+      console.log('[Vaughan-Ext] window.__VAUGHAN_ORIGIN__ =', window.__VAUGHAN_ORIGIN__);
+      
+      if (window.__VAUGHAN_WS_PORT__) {
+        console.log('[Vaughan-Ext] ✅ Using injected WebSocket port:', window.__VAUGHAN_WS_PORT__);
+        this.portRange = [window.__VAUGHAN_WS_PORT__, window.__VAUGHAN_WS_PORT__];
+        this.currentPort = window.__VAUGHAN_WS_PORT__;
+      } else {
+        console.log('[Vaughan-Ext] ❌ No injected port found, trying port range 8766-8800');
+        this.portRange = [8766, 8800]; // Fallback: try ports in this range
+        this.currentPort = this.portRange[0];
+      }
       
       this.connect();
     }
@@ -51,6 +65,9 @@
           console.log(`[Vaughan-Ext] Connected to port ${this.currentPort}! ✅`);
           this.isConnected = true;
           this.reconnectAttempts = 0;
+          
+          // Emit ready event for dApps waiting for connection
+          window.dispatchEvent(new CustomEvent('vaughan:ready'));
         };
         
         this.ws.onmessage = (event) => {
@@ -78,8 +95,27 @@
         this.ws.onerror = (error) => {
           console.error('[Vaughan-Ext] WebSocket error:', error);
           
-          // Try next port if connection failed
-          if (!this.isConnected && this.currentPort < this.portRange[1]) {
+          // Check if this is a CSP violation (common on OpenSea)
+          if (window.location.hostname.includes('opensea.io')) {
+            console.error('[Vaughan-Ext] ⚠️ OpenSea blocks WebSocket connections due to CSP');
+            console.error('[Vaughan-Ext] This is a known limitation - OpenSea requires a browser extension or WalletConnect');
+            // Don't retry on OpenSea - it will never work
+            return;
+          }
+          
+          // If we have an injected port, retry with exponential backoff
+          if (window.__VAUGHAN_WS_PORT__ && !this.isConnected) {
+            if (this.reconnectAttempts < this.maxReconnectAttempts) {
+              this.reconnectAttempts++;
+              const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 5000);
+              console.log(`[Vaughan-Ext] Retrying connection in ${delay}ms (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+              setTimeout(() => this.connect(), delay);
+            } else {
+              console.error('[Vaughan-Ext] Max reconnection attempts reached');
+            }
+          }
+          // Try next port if no injected port and connection failed
+          else if (!this.isConnected && this.currentPort < this.portRange[1]) {
             this.currentPort++;
             console.log(`[Vaughan-Ext] Trying next port: ${this.currentPort}`);
             setTimeout(() => this.connect(), 100);
@@ -96,23 +132,47 @@
           });
           this.pendingRequests.clear();
           
-          // Attempt reconnection
+          // Don't reconnect on OpenSea - CSP blocks it
+          if (window.location.hostname.includes('opensea.io')) {
+            console.error('[Vaughan-Ext] ⚠️ OpenSea CSP prevents WebSocket connections');
+            return;
+          }
+          
+          // Attempt reconnection with exponential backoff
           if (this.reconnectAttempts < this.maxReconnectAttempts) {
             this.reconnectAttempts++;
-            console.log(`[Vaughan-Ext] Reconnecting (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
-            setTimeout(() => this.connect(), this.reconnectDelay * this.reconnectAttempts);
+            const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 5000);
+            console.log(`[Vaughan-Ext] Reconnecting in ${delay}ms (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+            setTimeout(() => this.connect(), delay);
           } else {
             console.error('[Vaughan-Ext] Max reconnection attempts reached');
           }
         };
       } catch (error) {
         console.error('[Vaughan-Ext] Failed to create WebSocket:', error);
+        
+        // Check for CSP error
+        if (error.message && error.message.includes('Content Security Policy')) {
+          console.error('[Vaughan-Ext] ⚠️ CSP blocks WebSocket connections on this site');
+          console.error('[Vaughan-Ext] This site requires a browser extension or WalletConnect');
+        }
       }
     }
 
     async sendRequest(method, params = []) {
+      // If not connected, wait a bit for connection to establish
       if (!this.isConnected) {
-        throw new Error('WebSocket not connected. Is Vaughan Wallet running?');
+        console.log('[Vaughan-Ext] Not connected yet, waiting for connection...');
+        let attempts = 0;
+        const maxAttempts = 30; // 3 seconds
+        while (!this.isConnected && attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          attempts++;
+        }
+        
+        if (!this.isConnected) {
+          throw new Error('WebSocket not connected. Is Vaughan Wallet running?');
+        }
       }
       
       const id = this.generateId();
@@ -120,7 +180,10 @@
         id,
         jsonrpc: '2.0',
         method,
-        params
+        params,
+        // Include window metadata for session management
+        _window_label: window.__VAUGHAN_WINDOW_LABEL__ || 'unknown',
+        _origin: window.__VAUGHAN_ORIGIN__ || window.location.origin
       };
       
       console.log('[Vaughan-Ext] Request:', method, params);
@@ -213,27 +276,54 @@
       try {
         console.log('[Vaughan-Ext] Initializing provider...');
         
-        // Wait for WebSocket connection
+        // Wait for WebSocket connection with longer timeout
         let attempts = 0;
-        while (!this.communicator.isConnected && attempts < 10) {
+        const maxAttempts = 50; // 5 seconds total
+        while (!this.communicator.isConnected && attempts < maxAttempts) {
           await new Promise(resolve => setTimeout(resolve, 100));
           attempts++;
         }
         
         if (!this.communicator.isConnected) {
-          console.error('[Vaughan-Ext] Failed to connect to wallet');
+          console.warn('[Vaughan-Ext] Provider initialized without WebSocket connection (will retry on first request)');
+          this._chainId = '0x171'; // PulseChain default
+          this._isConnected = false;
           return;
         }
         
+        console.log('[Vaughan-Ext] WebSocket connected, fetching chain ID...');
+        
         // Get initial chain ID
-        const chainId = await this.request({ method: 'eth_chainId' });
-        this._chainId = chainId;
-        this._isConnected = true;
-        
-        console.log('[Vaughan-Ext] Provider initialized with chainId:', chainId);
-        
-        // Emit connect event
-        this.emit('connect', { chainId });
+        try {
+          const chainId = await this.request({ method: 'eth_chainId' });
+          this._chainId = chainId;
+          this._isConnected = true;
+          
+          console.log('[Vaughan-Ext] Provider initialized with chainId:', chainId);
+          
+          // Emit connect event
+          this.emit('connect', { chainId });
+          
+          // Check for auto-approved session (wallet opened this dApp)
+          console.log('[Vaughan-Ext] Checking for existing accounts (auto-connect)...');
+          try {
+            const accounts = await this.request({ method: 'eth_accounts' });
+            if (accounts && accounts.length > 0) {
+              console.log('[Vaughan-Ext] Auto-connect: Found existing accounts:', accounts);
+              this._accounts = accounts;
+              // Emit accountsChanged to notify dApp
+              this.emit('accountsChanged', accounts);
+            } else {
+              console.log('[Vaughan-Ext] No existing accounts found (manual connection required)');
+            }
+          } catch (error) {
+            console.warn('[Vaughan-Ext] Failed to check for existing accounts:', error);
+          }
+        } catch (error) {
+          console.warn('[Vaughan-Ext] Failed to get chain ID, using default:', error);
+          this._chainId = '0x171'; // PulseChain default
+          this._isConnected = false;
+        }
       } catch (error) {
         console.error('[Vaughan-Ext] Failed to initialize provider:', error);
         this._chainId = '0x171'; // PulseChain default
@@ -352,13 +442,25 @@
     );
   }
 
-  // Announce provider
+  // Announce provider immediately
   announceProvider();
   
   // Listen for discovery requests
   window.addEventListener('eip6963:requestProvider', () => {
     announceProvider();
   });
+
+  // AGGRESSIVE: Periodically announce provider for dynamically loaded wallet selectors
+  // OpenSea and other sites load their wallet selector UI very late
+  const announceInterval = setInterval(() => {
+    announceProvider();
+  }, 200); // Announce every 200ms (more aggressive)
+  
+  // Stop announcing after 30 seconds (some sites are VERY slow)
+  setTimeout(() => {
+    clearInterval(announceInterval);
+    console.log('[Vaughan-Ext] Stopped periodic announcements after 30 seconds');
+  }, 30000);
 
   console.log('[Vaughan-Ext] EIP-6963 announcement sent ✅');
 })();

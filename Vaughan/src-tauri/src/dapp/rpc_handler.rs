@@ -152,9 +152,14 @@ async fn handle_accounts(
             .iter()
             .map(|addr| format!("{:?}", addr))
             .collect();
+        
+        eprintln!("[RPC] eth_accounts - Found session for window: {}, auto_approved: {}, accounts: {:?}", 
+            window_label, connection.auto_approved, accounts);
+        
         Ok(serde_json::json!(accounts))
     } else {
         // Not connected - return empty array
+        eprintln!("[RPC] eth_accounts - No session found for window: {}", window_label);
         Ok(serde_json::json!([]))
     }
 }

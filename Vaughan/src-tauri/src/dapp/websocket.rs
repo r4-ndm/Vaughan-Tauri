@@ -135,14 +135,18 @@ async fn handle_connection(
                                     let method = request["method"].as_str().unwrap_or("");
                                     let params = request["params"].as_array().cloned().unwrap_or_default();
                                     
-                                    log_rpc_request_start(method, "external", id);
+                                    // Extract window metadata (sent by provider script)
+                                    let window_label = request["_window_label"].as_str().unwrap_or("websocket");
+                                    let origin = request["_origin"].as_str().unwrap_or("external");
+                                    
+                                    log_rpc_request_start(method, origin, id);
                                     let start = std::time::Instant::now();
                                     
                                     // Process request using existing RPC handler
                                     let result = dapp::rpc_handler::handle_request(
                                         state_ref,
-                                        "websocket",
-                                        "external",
+                                        window_label,
+                                        origin,
                                         method,
                                         params
                                     ).await;

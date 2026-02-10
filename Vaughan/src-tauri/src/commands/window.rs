@@ -106,6 +106,12 @@ pub async fn open_dapp_window(
     // Get origin for registration
     let origin = validated_url.origin().ascii_serialization();
 
+    // Get WebSocket port from state
+    let ws_port = state.get_websocket_port().await
+        .ok_or_else(|| "WebSocket server not started".to_string())?;
+    
+    eprintln!("[Window] WebSocket server running on port: {}", ws_port);
+
     // Use provided init_script or default to PROVIDER_SCRIPT_EXTENSION (CSP bypass)
     let provider_script = if let Some(script) = init_script {
         eprintln!("[Window] Using custom init_script ({} bytes)", script.len());
@@ -114,12 +120,14 @@ pub async fn open_dapp_window(
             // Inject window metadata for provider
             window.__VAUGHAN_WINDOW_LABEL__ = "{}";
             window.__VAUGHAN_ORIGIN__ = "{}";
+            window.__VAUGHAN_WS_PORT__ = {};
             
             // Provider script
             {}
             "#,
             window_label,
             origin,
+            ws_port,
             script
         )
     } else {
@@ -129,12 +137,14 @@ pub async fn open_dapp_window(
             // Inject window metadata for provider
             window.__VAUGHAN_WINDOW_LABEL__ = "{}";
             window.__VAUGHAN_ORIGIN__ = "{}";
+            window.__VAUGHAN_WS_PORT__ = {};
             
             // Provider script
             {}
             "#,
             window_label,
             origin,
+            ws_port,
             PROVIDER_SCRIPT_EXTENSION.as_str()
         )
     };
