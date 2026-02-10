@@ -268,6 +268,15 @@
       this._accounts = [];
       this._isConnected = false;
       
+      // OpenSea compatibility: Add _metamask object
+      this._metamask = {
+        isUnlocked: async () => true,
+        requestBatch: async (requests) => {
+          // Handle MetaMask batch API if OpenSea uses it
+          return Promise.all(requests.map(req => this.request(req)));
+        }
+      };
+      
       // Initialize
       this._initialize();
     }
@@ -304,6 +313,12 @@
           // Emit connect event
           this.emit('connect', { chainId });
           
+          // OpenSea compatibility: Emit connect event again after a delay
+          // Some dApps check for events in specific order/timing
+          setTimeout(() => {
+            this.emit('connect', { chainId });
+          }, 100);
+          
           // Check for auto-approved session (wallet opened this dApp)
           console.log('[Vaughan-Ext] Checking for existing accounts (auto-connect)...');
           try {
@@ -329,6 +344,13 @@
         this._chainId = '0x171'; // PulseChain default
         this._isConnected = false;
       }
+    }
+
+    /**
+     * Check if provider is connected (synchronous for OpenSea compatibility)
+     */
+    isConnected() {
+      return this._isConnected;
     }
 
     /**
