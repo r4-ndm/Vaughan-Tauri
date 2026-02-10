@@ -226,8 +226,8 @@ pub async fn open_dapp_url(
     let window_label = format!("dapp-{}", uuid::Uuid::new_v4());
     eprintln!("[Window] Generated window label: {}", window_label);
 
-    // Get provider script (lazy-loaded)
-    let provider_script = PROVIDER_SCRIPT.as_str();
+    // Get provider script (lazy-loaded) - using extension-style provider
+    let provider_script = PROVIDER_SCRIPT_EXTENSION.as_str();
     eprintln!("[Window] Provider script loaded ({} bytes)", provider_script.len());
 
     // Create WebView window
