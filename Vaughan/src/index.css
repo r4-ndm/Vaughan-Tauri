@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+@theme {
+  --font-family-sans: Inter, system-ui, sans-serif;
+  --font-family-mono: JetBrains Mono, monospace;
+  
+  --color-primary-50: #eff6ff;
+  --color-primary-100: #dbeafe;
+  --color-primary-200: #bfdbfe;
+  --color-primary-300: #93c5fd;
+  --color-primary-400: #60a5fa;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #2563eb;
+  --color-primary-700: #1d4ed8;
+  --color-primary-800: #1e40af;
+  --color-primary-900: #1e3a8a;
+  
+  --color-dark-bg: #0f172a;
+  --color-dark-surface: #1e293b;
+  --color-dark-border: #334155;
+  --color-dark-text: #f1f5f9;
+  --color-dark-text-secondary: #94a3b8;
+}
+
+/* Custom component styles */
+.btn {
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  transition: colors 0.2s;
+}
+
+.btn-primary {
+  background-color: rgb(37 99 235);
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: rgb(29 78 216);
+}
+
+.btn-secondary {
+  background-color: rgb(30 41 59);
+  color: rgb(241 245 249);
+}
+
+.btn-secondary:hover {
+  background-color: rgb(51 65 85);
+}
+
+.input {
+  width: 100%;
+  padding: 0.5rem 1rem;
+  background-color: rgb(30 41 59);
+  border: 1px solid rgb(51 65 85);
+  border-radius: 0.5rem;
+  color: rgb(241 245 249);
+}
+
+.input::placeholder {
+  color: rgb(148 163 184);
+}
+
+.input:focus {
+  outline: none;
+  ring: 2px solid rgb(59 130 246);
+}
+
+.card {
+  background-color: rgb(30 41 59);
+  border: 1px solid rgb(51 65 85);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+}
+
+.text-gradient {
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  background-image: linear-gradient(to right, rgb(96 165 250), rgb(37 99 235));
+}

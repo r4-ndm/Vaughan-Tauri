@@ -1,0 +1,124 @@
+# Rust / Cargo
+/target
+**/*.rs.bk
+*.pdb
+Cargo.lock
+
+# Tauri
+src-tauri/target/
+src-tauri/Cargo.lock
+src-tauri/WixTools
+
+# Frontend
+web/node_modules/
+web/dist/
+web/.vite/
+web/build/
+node_modules/
+dist/
+.vite/
+
+# Build outputs
+*.exe
+*.dmg
+*.app
+*.deb
+*.rpm
+*.AppImage
+*.apk
+*.aab
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS
+Thumbs.db
+desktop.ini
+.Spotlight-V100
+.Trashes
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Testing
+coverage/
+.nyc_output/
+*.lcov
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Wallet data (NEVER commit!)
+wallet_data/
+keystore/
+*.keystore
+*.wallet
+
+# Secrets (NEVER commit!)
+*.key
+*.pem
+*.p12
+secrets/
+private/
+
+# Development
+.cargo/
+.rustup/
+
+# Documentation build
+docs/_build/
+docs/.doctrees/
+
+# Benchmarks
+benches/results/
+criterion/
+
+# Profiling
+*.profraw
+*.profdata
+
+# Android
+src-tauri/gen/android/
+.gradle/
+local.properties
+
+# iOS (future)
+src-tauri/gen/ios/
+Pods/
+*.xcworkspace
+*.xcuserdata
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# Old Iced version (for reference during development)
+Vaughan-old/
