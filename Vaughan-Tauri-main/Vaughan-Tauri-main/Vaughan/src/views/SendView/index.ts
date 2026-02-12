@@ -1,1 +1,0 @@
-export { SendView } from './SendView';

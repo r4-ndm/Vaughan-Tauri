@@ -7,6 +7,8 @@
     "urls": [
       "https://app.pulsex.com",
       "https://*.pulsex.com",
+      "https://app.piteas.io",
+      "https://*.piteas.io",
       "https://swap.internetmoney.io",
       "https://app.uniswap.org",
       "https://*.uniswap.org",

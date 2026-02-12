@@ -186,6 +186,17 @@ export const WHITELISTED_DAPPS: WhitelistedDapp[] = [
     verified: true,
     dateAdded: '2026-02-10',
   },
+  {
+    id: 'piteas',
+    name: 'Piteas',
+    description: 'DeFi platform on PulseChain',
+    url: 'https://app.piteas.io',
+    icon: '⚓',
+    category: 'defi',
+    chains: [369, 943], // PulseChain, PulseChain Testnet
+    verified: true,
+    dateAdded: '2026-02-12',
+  },
 ];
 
 /**
