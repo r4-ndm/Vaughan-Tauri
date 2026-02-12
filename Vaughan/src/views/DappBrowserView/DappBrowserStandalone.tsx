@@ -9,6 +9,8 @@ import { useState } from 'react';
 import { useProviderBridge } from '../../hooks/useProviderBridge';
 import { useApprovalPolling } from '../../hooks/useApprovalPolling';
 import { TransactionApproval, ConnectionApproval } from '../../components/ApprovalModal';
+import { PersonalSignApproval } from '../../components/ApprovalModal/PersonalSignApproval';
+import { WatchAssetApproval } from '../../components/ApprovalModal/WatchAssetApproval';
 
 export function DappBrowserStandalone() {
   // Get URL from query parameter or default to test page
@@ -226,6 +228,34 @@ export function DappBrowserStandalone() {
           gasLimit={currentApproval.request_type.gasLimit}
           gasPrice={currentApproval.request_type.gasPrice}
           data={currentApproval.request_type.data}
+          onApprove={handleApprove}
+          onReject={handleReject}
+          onClose={handleModalClose}
+        />
+      )}
+
+      {/* Personal Sign Approval Modal */}
+      {currentApproval && currentApproval.request_type.type === 'personalSign' && (
+        <PersonalSignApproval
+          id={currentApproval.id}
+          origin={currentApproval.request_type.origin}
+          address={currentApproval.request_type.address}
+          message={currentApproval.request_type.message}
+          onApprove={handleApprove}
+          onReject={handleReject}
+          onClose={handleModalClose}
+        />
+      )}
+
+      {/* Watch Asset Approval Modal */}
+      {currentApproval && currentApproval.request_type.type === 'watchAsset' && (
+        <WatchAssetApproval
+          id={currentApproval.id}
+          origin={currentApproval.request_type.origin}
+          address={currentApproval.request_type.address}
+          symbol={currentApproval.request_type.symbol}
+          decimals={currentApproval.request_type.decimals}
+          image={currentApproval.request_type.image}
           onApprove={handleApprove}
           onReject={handleReject}
           onClose={handleModalClose}

@@ -24,6 +24,8 @@ export interface WhitelistedDapp {
   verified: boolean;
   /** Date added (YYYY-MM-DD) */
   dateAdded: string;
+  /** Optional: Path to local executable to launch before opening */
+  launchExecutable?: string;
 }
 
 /**
@@ -151,8 +153,31 @@ export const WHITELISTED_DAPPS: WhitelistedDapp[] = [
 
   // PulseChain Ecosystem (for testing)
   {
+    id: 'pulsechain-faucet',
+    name: 'PulseChain Faucet',
+    description: 'Get free testnet tPLS tokens',
+    url: 'https://faucet.v4.testnet.pulsechain.com/',
+    icon: '💧',
+    category: 'other',
+    chains: [943], // PulseChain Testnet V4
+    verified: true,
+    dateAdded: '2026-02-12',
+  },
+  {
+    id: 'pulsex-local',
+    name: 'PulseX (Local)',
+    description: 'Local PulseX instance - fast and private',
+    url: 'http://127.0.0.1:3691',
+    icon: '💓',
+    category: 'dex',
+    chains: [369, 943], // PulseChain, PulseChain Testnet
+    verified: true,
+    dateAdded: '2026-02-12',
+    launchExecutable: 'C:\\Users\\rb3y9\\Desktop\\Vaughan-Tauri\\PulseX\\pulsex-server.exe',
+  },
+  {
     id: 'pulsex',
-    name: 'PulseX',
+    name: 'PulseX (Web)',
     description: 'Native DEX on PulseChain',
     url: 'https://app.pulsex.com',
     icon: '💓',

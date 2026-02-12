@@ -577,57 +577,6 @@ pub async fn clear_all_approvals(
 ///
 /// # Arguments
 ///
-/// * `state` - Application state
-///
-/// # Returns
-///
-/// * `Ok(u16)` - WebSocket server port
-/// * `Err(String)` - WebSocket server not started
-///
-/// # Example
-///
-/// ```typescript
-/// const port = await invoke('get_websocket_port');
-/// const ws = new WebSocket(`ws://localhost:${port}`);
-/// ```
-#[tauri::command]
-pub async fn get_websocket_port(
-    state: State<'_, VaughanState>,
-) -> Result<u16, String> {
-    state.get_websocket_port()
-        .await
-        .ok_or_else(|| "WebSocket server not started".to_string())
-}
-
-/// Get WebSocket server health metrics
-///
-/// Returns current health metrics including connection counts, message counts,
-/// errors, and uptime.
-///
-/// # Arguments
-///
-/// * `state` - Application state
-///
-/// # Returns
-///
-/// * `Ok(HealthMetrics)` - Current health metrics
-///
-/// # Example
-///
-/// ```typescript
-/// const health = await invoke('get_websocket_health');
-/// console.log(`Active connections: ${health.active_connections}`);
-/// console.log(`Messages processed: ${health.messages_processed}`);
-/// console.log(`Uptime: ${health.uptime_seconds}s`);
-/// ```
-#[tauri::command]
-pub async fn get_websocket_health(
-    state: State<'_, VaughanState>,
-) -> Result<crate::dapp::HealthMetrics, String> {
-    let port = state.get_websocket_port().await;
-    Ok(state.health_monitor.get_metrics(port))
-}
-
 /// Get performance profiling statistics
 ///
 /// Returns performance statistics for all RPC methods including

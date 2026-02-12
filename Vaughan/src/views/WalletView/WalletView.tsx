@@ -13,6 +13,7 @@ import { TauriService } from '../../services/tauri';
 import { useApprovalPolling, ApprovalRequest } from '../../hooks/useApprovalPolling';
 import { ConnectionApproval } from '../../components/ApprovalModal/ConnectionApproval';
 import { TransactionApproval } from '../../components/ApprovalModal/TransactionApproval';
+import { PersonalSignApproval } from '../../components/ApprovalModal/PersonalSignApproval';
 import { WhitelistedDapp } from '../../utils/whitelistedDapps';
 
 interface DappConnection {
@@ -139,14 +140,14 @@ export function WalletView() {
   /**
    * Handle approval
    */
-  const handleApprove = async (id: string): Promise<void> => {
+  const handleApprove = async (id: string, password?: string): Promise<void> => {
     try {
       console.log('[WalletView] Approving request:', id);
       await invoke('respond_to_approval', { 
         response: { 
           id, 
           approved: true,
-          data: null
+          data: password ? { password } : null
         } 
       });
       console.log('[WalletView] Approval sent successfully');
@@ -160,7 +161,7 @@ export function WalletView() {
       });
     } catch (err) {
       console.error('[WalletView] Failed to approve:', err);
-      // Re-throw so ConnectionApproval can show the error
+      // Re-throw so approval modal can show the error
       throw err;
     }
   };
@@ -341,6 +342,18 @@ export function WalletView() {
           gasLimit={currentApproval.request_type.gasLimit}
           gasPrice={currentApproval.request_type.gasPrice}
           data={currentApproval.request_type.data}
+          onApprove={handleApprove}
+          onReject={handleReject}
+          onClose={handleCloseApproval}
+        />
+      )}
+
+      {currentApproval && currentApproval.request_type.type === 'personalSign' && (
+        <PersonalSignApproval
+          id={currentApproval.id}
+          origin={currentApproval.request_type.origin}
+          address={currentApproval.request_type.address}
+          message={currentApproval.request_type.message}
           onApprove={handleApprove}
           onReject={handleReject}
           onClose={handleCloseApproval}

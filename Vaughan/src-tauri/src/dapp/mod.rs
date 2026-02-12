@@ -7,7 +7,6 @@ pub mod rpc_handler;
 pub mod session;
 pub mod approval;
 pub mod window_registry;
-pub mod websocket;
 pub mod health;
 pub mod logging;
 pub mod profiling;

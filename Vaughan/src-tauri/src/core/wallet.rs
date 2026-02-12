@@ -529,6 +529,47 @@ impl WalletService {
             .cloned()
             .ok_or_else(|| WalletError::SignerNotAvailable(address.to_string()))
     }
+
+    /// Sign a message with the specified account
+    ///
+    /// # Arguments
+    ///
+    /// * `address` - Account address to sign with
+    /// * `message` - Message bytes to sign
+    /// * `password` - Wallet password (to unlock if needed)
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Vec<u8>)` - Signature bytes (65 bytes: r + s + v)
+    /// * `Err(WalletError)` - If signing fails
+    ///
+    /// # Security
+    ///
+    /// - Verifies password before signing
+    /// - Uses Alloy's personal_sign (EIP-191)
+    /// - Signature format: 65 bytes (r + s + v)
+    pub async fn sign_message(
+        &self,
+        address: &Address,
+        message: &[u8],
+        password: &str,
+    ) -> Result<Vec<u8>, WalletError> {
+        // Verify password
+        self.verify_password(password).await?;
+
+        // Get signer
+        let signer = self.get_signer(address).await?;
+
+        // Sign message using Alloy's personal_sign (EIP-191)
+        use alloy::signers::Signer;
+        let signature = signer
+            .sign_message(message)
+            .await
+            .map_err(|e| WalletError::SigningFailed(e.to_string()))?;
+
+        // Convert signature to bytes (r + s + v format, 65 bytes)
+        Ok(signature.as_bytes().to_vec())
+    }
 }
 
 impl Default for WalletService {

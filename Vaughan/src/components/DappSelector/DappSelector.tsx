@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { WHITELISTED_DAPPS, WhitelistedDapp } from '../../utils/whitelistedDapps';
+import { invoke } from '@tauri-apps/api/core';
 
 interface DappSelectorProps {
   onSelect: (dapp: WhitelistedDapp) => void;
@@ -27,6 +28,31 @@ const CHAIN_NAMES: Record<number, string> = {
  */
 export function DappSelector({ onSelect, onClose, currentChainId }: DappSelectorProps) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [launching, setLaunching] = useState<string | null>(null);
+
+  // Handle dApp selection with optional executable launch
+  const handleSelectDapp = async (dapp: WhitelistedDapp) => {
+    // If dApp has a launch executable, start it first
+    if (dapp.launchExecutable) {
+      setLaunching(dapp.id);
+      try {
+        console.log('[DappSelector] Launching executable:', dapp.launchExecutable);
+        await invoke('launch_external_app', { exePath: dapp.launchExecutable });
+        console.log('[DappSelector] Executable launched successfully');
+        
+        // Wait a moment for the server to start
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (error) {
+        console.error('[DappSelector] Failed to launch executable:', error);
+        // Continue anyway - maybe it's already running
+      } finally {
+        setLaunching(null);
+      }
+    }
+    
+    // Open the dApp
+    onSelect(dapp);
+  };
 
   // Group dApps by chain
   const dappsByChain: Record<number, WhitelistedDapp[]> = {};
@@ -116,13 +142,17 @@ export function DappSelector({ onSelect, onClose, currentChainId }: DappSelector
                     {dappsByChain[chainId].map(dapp => (
                       <button
                         key={`${chainId}-${dapp.id}`}
-                        onClick={() => onSelect(dapp)}
-                        className="w-full px-4 py-3 bg-slate-900 hover:bg-slate-700 border border-slate-800 hover:border-primary-500 rounded-lg text-left transition-all group"
+                        onClick={() => handleSelectDapp(dapp)}
+                        disabled={launching === dapp.id}
+                        className="w-full px-4 py-3 bg-slate-900 hover:bg-slate-700 border border-slate-800 hover:border-primary-500 rounded-lg text-left transition-all group disabled:opacity-50 disabled:cursor-wait"
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex-1">
                             <div className="font-medium text-white group-hover:text-primary-400 transition-colors">
                               {dapp.name}
+                              {launching === dapp.id && (
+                                <span className="ml-2 text-xs text-primary-400">Launching...</span>
+                              )}
                             </div>
                             <div className="text-sm text-slate-400 mt-0.5">
                               {dapp.description}

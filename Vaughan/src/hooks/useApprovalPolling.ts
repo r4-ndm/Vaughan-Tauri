@@ -39,6 +39,15 @@ export type ApprovalRequestType =
       typedData: string;
     }
   | {
+      type: 'watchAsset';
+      origin: string;
+      asset_type: string;
+      address: string;
+      symbol: string;
+      decimals: number;
+      image?: string;
+    }
+  | {
       type: 'switchNetwork';
       origin: string;
       chainId: number;

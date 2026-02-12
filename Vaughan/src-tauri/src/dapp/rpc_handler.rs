@@ -61,6 +61,14 @@ pub async fn handle_request(
         "wallet_switchEthereumChain" => handle_switch_chain(state, window_label, origin, params).await,
         "wallet_addEthereumChain" => handle_add_chain(state, window_label, origin, params).await,
 
+        // Asset Management (EIP-747)
+        "wallet_watchAsset" => handle_watch_asset(state, window_label, origin, params).await,
+
+        // Permission Management (EIP-2255) - Stub implementations
+        "wallet_requestPermissions" => handle_request_permissions(state, window_label, origin, params).await,
+        "wallet_revokePermissions" => handle_revoke_permissions(state, window_label, origin, params).await,
+        "wallet_getPermissions" => handle_get_permissions(state, window_label, origin).await,
+
         // Unsupported
         _ => Err(WalletError::UnsupportedMethod(method.to_string())),
     }
@@ -437,8 +445,90 @@ async fn handle_personal_sign(
     origin: &str,
     params: Vec<Value>,
 ) -> Result<Value, WalletError> {
-    // For now, return unsupported (will implement in Phase 3.3)
-    Err(WalletError::UnsupportedMethod("personal_sign".to_string()))
+    // personal_sign params: [message, address]
+    // message is hex-encoded string to sign
+    // address is the account to sign with
+    
+    if params.len() < 2 {
+        return Err(WalletError::Custom("personal_sign requires 2 parameters".to_string()));
+    }
+
+    let message_hex = params[0]
+        .as_str()
+        .ok_or_else(|| WalletError::Custom("Message must be a string".to_string()))?;
+    
+    let address_str = params[1]
+        .as_str()
+        .ok_or_else(|| WalletError::Custom("Address must be a string".to_string()))?;
+
+    // Verify session exists
+    let session = state
+        .session_manager
+        .get_session_by_window(window_label, origin)
+        .await
+        .ok_or_else(|| WalletError::NotConnected)?;
+
+    // Parse address
+    let address = address_str
+        .parse::<alloy::primitives::Address>()
+        .map_err(|_| WalletError::InvalidAddress("Invalid address format".to_string()))?;
+
+    // Verify address is in session
+    if !session.accounts.contains(&address) {
+        return Err(WalletError::PermissionDenied("Address not authorized".to_string()));
+    }
+
+    // Decode message from hex
+    let message_bytes = if message_hex.starts_with("0x") {
+        hex::decode(&message_hex[2..])
+            .map_err(|_| WalletError::Custom("Invalid hex message".to_string()))?
+    } else {
+        hex::decode(message_hex)
+            .map_err(|_| WalletError::Custom("Invalid hex message".to_string()))?
+    };
+
+    // Convert to string for display
+    let message_text = String::from_utf8_lossy(&message_bytes).to_string();
+
+    // Create approval request
+    use crate::dapp::ApprovalRequestType;
+
+    let request_type = ApprovalRequestType::PersonalSign {
+        origin: origin.to_string(),
+        address: format!("{:?}", address),
+        message: message_text,
+    };
+
+    // Add approval request
+    let (_id, rx) = state
+        .approval_queue
+        .add_request(window_label.to_string(), request_type)
+        .await?;
+
+    // Wait for user response
+    let response = rx
+        .await
+        .map_err(|_| WalletError::Custom("Approval request cancelled".to_string()))?;
+
+    // Check if approved
+    if !response.approved {
+        return Err(WalletError::UserRejected);
+    }
+
+    // Get password from response data
+    let password = response
+        .data
+        .and_then(|data| data.get("password").and_then(|p| p.as_str().map(String::from)))
+        .ok_or_else(|| WalletError::Custom("Password required for signing".to_string()))?;
+
+    // Sign the message using wallet service
+    let signature = state
+        .wallet_service
+        .sign_message(&address, &message_bytes, &password)
+        .await?;
+
+    // Return signature as hex string
+    Ok(serde_json::json!(format!("0x{}", hex::encode(signature))))
 }
 
 async fn handle_sign_typed_data_v4(
@@ -466,11 +556,156 @@ async fn handle_switch_chain(
 }
 
 async fn handle_add_chain(
+    _state: &VaughanState,
+    _window_label: &str,
+    _origin: &str,
+    _params: Vec<Value>,
+) -> Result<Value, WalletError> {
+    // For now, return unsupported (will implement in Phase 3.3)
+    Err(WalletError::UnsupportedMethod("wallet_addEthereumChain".to_string()))
+}
+
+// ============================================================================
+// Permission Management Handlers (EIP-2255)
+// ============================================================================
+
+/// Handle wallet_requestPermissions
+/// 
+/// Stub implementation - returns success to unblock dApps
+/// Full implementation in Phase 4
+async fn handle_request_permissions(
+    _state: &VaughanState,
+    _window_label: &str,
+    _origin: &str,
+    _params: Vec<Value>,
+) -> Result<Value, WalletError> {
+    // Return empty permissions array (dApp already has eth_accounts permission via session)
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64;
+    
+    Ok(serde_json::json!([
+        {
+            "parentCapability": "eth_accounts",
+            "date": timestamp
+        }
+    ]))
+}
+
+/// Handle wallet_revokePermissions
+/// 
+/// Stub implementation - returns null to indicate success
+/// Full implementation in Phase 4
+async fn handle_revoke_permissions(
+    _state: &VaughanState,
+    _window_label: &str,
+    _origin: &str,
+    _params: Vec<Value>,
+) -> Result<Value, WalletError> {
+    // Return null to indicate success
+    Ok(serde_json::json!(null))
+}
+
+/// Handle wallet_getPermissions
+/// 
+/// Stub implementation - returns current permissions
+/// Full implementation in Phase 4
+async fn handle_get_permissions(
+    state: &VaughanState,
+    window_label: &str,
+    origin: &str,
+) -> Result<Value, WalletError> {
+    // Check if session exists
+    if state.session_manager.get_session_by_window(window_label, origin).await.is_some() {
+        // Return eth_accounts permission
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as i64;
+        
+        Ok(serde_json::json!([
+            {
+                "parentCapability": "eth_accounts",
+                "date": timestamp
+            }
+        ]))
+    } else {
+        // No permissions
+        Ok(serde_json::json!([]))
+    }
+}
+
+// ============================================================================
+// Asset Management Handlers (EIP-747)
+// ============================================================================
+
+/// Handle wallet_watchAsset (EIP-747)
+/// 
+/// Allows dApps to suggest tokens for users to add to their wallet.
+/// This is the "Add to MetaMask" button functionality.
+/// 
+/// # Parameters
+/// 
+/// Expected params format:
+/// ```json
+/// {
+///   "type": "ERC20",
+///   "options": {
+///     "address": "0x...",
+///     "symbol": "TOKEN",
+///     "decimals": 18,
+///     "image": "https://..."  // optional
+///   }
+/// }
+/// ```
+async fn handle_watch_asset(
     state: &VaughanState,
     window_label: &str,
     origin: &str,
     params: Vec<Value>,
 ) -> Result<Value, WalletError> {
-    // For now, return unsupported (will implement in Phase 3.3)
-    Err(WalletError::UnsupportedMethod("wallet_addEthereumChain".to_string()))
+    // Parse parameters
+    let asset_params = params.get(0)
+        .ok_or_else(|| WalletError::Custom("Missing asset parameters".to_string()))?;
+    
+    let asset_type = asset_params.get("type")
+        .and_then(|v: &Value| v.as_str())
+        .ok_or_else(|| WalletError::Custom("Missing asset type".to_string()))?;
+    
+    // Only support ERC20 for now
+    if asset_type != "ERC20" {
+        return Err(WalletError::Custom(format!("Unsupported asset type: {}", asset_type)));
+    }
+    
+    let options = asset_params.get("options")
+        .ok_or_else(|| WalletError::Custom("Missing asset options".to_string()))?;
+    
+    let address = options.get("address")
+        .and_then(|v: &Value| v.as_str())
+        .ok_or_else(|| WalletError::Custom("Missing token address".to_string()))?;
+    
+    let symbol = options.get("symbol")
+        .and_then(|v: &Value| v.as_str())
+        .ok_or_else(|| WalletError::Custom("Missing token symbol".to_string()))?;
+    
+    let decimals = options.get("decimals")
+        .and_then(|v: &Value| v.as_u64())
+        .ok_or_else(|| WalletError::Custom("Missing token decimals".to_string()))?;
+    
+    let image = options.get("image")
+        .and_then(|v: &Value| v.as_str());
+    
+    eprintln!("[RPC] wallet_watchAsset request:");
+    eprintln!("  Address: {}", address);
+    eprintln!("  Symbol: {}", symbol);
+    eprintln!("  Decimals: {}", decimals);
+    eprintln!("  Image: {:?}", image);
+    eprintln!("  Origin: {}", origin);
+    
+    // AUTO-APPROVE: wallet_watchAsset is low-risk (just adds token to list)
+    // TODO: Add actual token storage when token management is implemented
+    eprintln!("[RPC] Auto-approving wallet_watchAsset (low-risk operation)");
+    
+    Ok(serde_json::json!(true))
 }

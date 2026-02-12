@@ -48,6 +48,15 @@ pub enum ApprovalRequestType {
         address: String,
         typed_data: String,
     },
+    /// Watch asset request (EIP-747)
+    WatchAsset {
+        origin: String,
+        asset_type: String,
+        address: String,
+        symbol: String,
+        decimals: u64,
+        image: Option<String>,
+    },
     /// Network switch request
     SwitchNetwork {
         origin: String,
