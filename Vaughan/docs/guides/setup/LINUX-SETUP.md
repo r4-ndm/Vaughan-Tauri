@@ -17,33 +17,36 @@ The environment variable `WEBKIT_DISABLE_COMPOSITING_MODE=1` is now automaticall
 
 **Solution**: Set `WEBKIT_DISABLE_COMPOSITING_MODE=1` environment variable (now automatic in package.json).
 
-### 2. WebSocket Connection Issue ✅
-**Problem**: HTTPS sites (like Uniswap) block insecure WebSocket connections (ws://) due to:
-- Mixed Content Policy (HTTPS page → WS connection)
-- Content Security Policy (CSP)
+### 2. Cross-Platform Environment Variables ✅
+**Problem**: Environment variable syntax differs between platforms (Linux/macOS vs Windows).
 
-**Solution**: Implemented secure WebSocket (WSS) with self-signed certificate.
+**Solution**: Use `cross-env` package to handle platform differences automatically.
+
+### 3. dApp Connection via Tauri IPC ✅
+**Problem**: Need secure, CSP-safe way for dApps to communicate with wallet.
+
+**Solution**: Implemented Tauri IPC bridge (no WebSocket needed):
+- Provider script injected via `initialization_script` (runs before page loads)
+- Uses Tauri's built-in IPC (secure, CSP-safe)
+- Works with all sites (HTTP and HTTPS)
+- No certificate warnings or mixed content issues
 
 **How it works**:
-1. Wallet generates a self-signed certificate on first run
-2. Certificate is cached in `~/.local/share/vaughan/certs/` (Linux)
-3. WebSocket server uses TLS (wss://) instead of plain ws://
-4. Browser will show a certificate warning on first connection
+1. Wallet injects provider script before page loads
+2. Provider uses Tauri IPC to communicate with backend
+3. All communication is secure and local (no network)
+4. Works identically on Linux, Windows, and macOS
 
-**First-time setup**:
-When you first open a dApp, your browser will show a certificate warning because the certificate is self-signed. This is expected and safe - it's your own wallet's certificate.
+### 4. Auto-Connect for Wallet-Opened dApps ✅
+**Problem**: Users had to manually approve connection even when they opened the dApp from the wallet.
 
-To trust the certificate:
-1. Open the dApp browser
-2. Browser shows "Your connection is not private" or similar
-3. Click "Advanced" → "Proceed to localhost (unsafe)" or similar
-4. This only needs to be done once per browser session
+**Solution**: Automatic connection approval for wallet-opened dApps:
+- When you click "Open dApp" in wallet, connection is pre-approved
+- No approval modal shown (seamless UX)
+- Transactions still require approval (security maintained)
+- Window label injection ensures correct session matching
 
-**Why this is secure**:
-- Certificate is generated locally on your machine
-- Only used for localhost connections
-- Private key never leaves your computer
-- Standard TLS encryption protects the connection
+**Technical details**: See `docs/architecture/WINDOW-LABEL-INJECTION.md`
 
 ## System Requirements
 
@@ -75,9 +78,31 @@ The `WEBKIT_DISABLE_COMPOSITING_MODE=1` variable is harmless on Windows/macOS (t
 - Balance display
 - Transaction building and signing
 - Network switching
-- dApp browser with secure WebSocket (WSS)
+- dApp browser with Tauri IPC (CSP-safe, no WebSocket needed)
 - dApp provider injection
-- Connection to HTTPS sites (after accepting certificate)
+- Auto-connect for wallet-opened dApps (seamless UX)
+- Connection to all sites (HTTPS and HTTP)
+
+### Auto-Connect Feature (2026-02-12)
+
+When you open a dApp from the wallet (e.g., click "Open Uniswap"), the connection is automatically approved:
+
+**How it works**:
+1. You click "Open dApp" in wallet
+2. dApp window opens
+3. ✅ Connection established automatically
+4. No approval modal shown
+5. Start using dApp immediately
+
+**Why this is safe**:
+- Wallet controls which dApps can be opened (whitelist)
+- You explicitly clicked "Open dApp" (clear intent)
+- Connection only reveals your address (no private keys)
+- Transactions still require approval (auto-connect ≠ auto-sign)
+
+**Technical details**: See `docs/architecture/WINDOW-LABEL-INJECTION.md` and `docs/architecture/AUTO-CONNECT-FEATURE.md`
+
+**Platform compatibility**: Works identically on Linux, Windows, and macOS
 
 ## Troubleshooting
 
@@ -87,17 +112,36 @@ Try running manually with the environment variable:
 WEBKIT_DISABLE_COMPOSITING_MODE=1 npm run tauri dev
 ```
 
-### dApp can't connect to wallet?
-First, check if you've accepted the self-signed certificate:
-1. Open browser DevTools (F12)
-2. Look for certificate errors in console
-3. If you see "NET::ERR_CERT_AUTHORITY_INVALID", you need to accept the certificate
-4. The browser should prompt you - click "Advanced" → "Proceed to localhost"
+### dApp not auto-connecting?
 
-If the issue persists:
-- Check that the WebSocket server is running (you should see "[WSS] Secure WebSocket server started on port 8766" in terminal)
-- Try restarting the wallet
-- Check browser console for specific error messages
+If you open a dApp from the wallet but still see an approval modal:
+
+1. **Check the logs** (terminal where you ran `npm run tauri dev`):
+   ```
+   [Window] Generated window label: dapp-c1dfac04-...
+   [SessionManager] Creating AUTO-APPROVED session for window: dapp-c1dfac04-...
+   [Vaughan-IPC] Window Label: dapp-c1dfac04-...  ← Should NOT be 'unknown'
+   [RPC] eth_accounts - Found session for window: dapp-c1dfac04-..., auto_approved: true
+   ```
+
+2. **If window label is 'unknown'**:
+   - This indicates a bug in window label injection
+   - Check browser console (F12) for errors
+   - Report the issue with logs
+
+3. **If session not found**:
+   - Check that you opened the dApp FROM the wallet (not by visiting URL directly)
+   - Only wallet-opened dApps get auto-connect
+   - Manually visited URLs will show approval modal (this is correct behavior)
+
+### dApp can't connect at all?
+
+1. **Check browser console** (F12) for errors
+2. **Verify Tauri IPC is working**:
+   - Look for `[Vaughan-IPC] Initializing Tauri IPC bridge...` in console
+   - Look for `[Vaughan-Provider] Provider injected successfully ✅` in console
+3. **Check terminal logs** for backend errors
+4. **Try restarting the wallet**
 
 ### Build for production
 ```bash
@@ -108,6 +152,28 @@ The built binary will work without needing to set environment variables.
 
 ## Development Notes
 
-The wallet now uses secure WebSocket (WSS) with self-signed certificates to enable connections from HTTPS sites. This is the same approach used by many development tools (like webpack-dev-server, vite, etc.) and is secure for localhost connections.
+The wallet uses Tauri IPC for dApp communication, which is:
+- **Secure**: All communication is local (no network)
+- **CSP-safe**: Works with strict Content Security Policies
+- **Cross-platform**: Works identically on Linux, Windows, and macOS
+- **No certificates needed**: No browser warnings or mixed content issues
 
-The certificate is automatically generated and cached, so it persists across restarts. Users only need to accept it once per browser session.
+The provider script is injected via `initialization_script`, which runs before the page loads and has access to Tauri APIs. This allows the provider to work even on sites with strict CSP that would block traditional script injection.
+
+### Auto-Connect Implementation
+
+When you open a dApp from the wallet:
+1. Wallet generates unique window label (UUID)
+2. Window label and origin injected into `initialization_script`
+3. Auto-approved session created with same window label
+4. Provider script uses injected window label for all requests
+5. Session lookup succeeds → accounts returned immediately
+6. No approval modal shown
+
+This is safe because:
+- Wallet controls which dApps can be opened (whitelist)
+- User explicitly clicked "Open dApp" (clear intent)
+- Connection only reveals address (no private keys)
+- Transactions still require approval
+
+See `docs/architecture/WINDOW-LABEL-INJECTION.md` for technical details.

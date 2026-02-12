@@ -43,13 +43,23 @@
 
     const { id, method, params } = event.data;
 
+    // Use injected window label (set by initialization_script before page loads)
+    // Fallback to Tauri metadata, then 'unknown'
+    const windowLabel = window.__VAUGHAN_WINDOW_LABEL__ 
+      || window.__TAURI_METADATA__?.currentWindow?.label 
+      || 'unknown';
+    
+    const origin = window.__VAUGHAN_ORIGIN__ || window.location.origin;
+
     console.log('[Vaughan-IPC] RPC Request:', method, params);
+    console.log('[Vaughan-IPC] Window Label:', windowLabel);
+    console.log('[Vaughan-IPC] Origin:', origin);
 
     try {
       // Call Tauri backend
       const result = await invoke('handle_dapp_request', {
-        windowLabel: window.__TAURI_METADATA__?.currentWindow?.label || 'unknown',
-        origin: window.location.origin,
+        windowLabel: windowLabel,
+        origin: origin,
         method,
         params: params || []
       });

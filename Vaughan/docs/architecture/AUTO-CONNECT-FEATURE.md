@@ -1,8 +1,12 @@
 # Auto-Connect for Whitelisted dApps
 
 **Date**: 2026-02-10  
+**Updated**: 2026-02-12 (Implementation Complete)  
 **Feature**: Automatic connection approval for trusted dApps  
-**Status**: Recommended Implementation
+**Status**: ✅ IMPLEMENTED & WORKING
+
+**Related Documentation**:
+- `WINDOW-LABEL-INJECTION.md` - Technical details on how window labels are injected and used
 
 ---
 

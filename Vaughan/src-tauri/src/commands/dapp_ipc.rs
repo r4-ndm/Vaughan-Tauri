@@ -33,7 +33,8 @@ pub async fn handle_dapp_request(
     method: String,
     params: Vec<Value>,
 ) -> Result<Value, String> {
-    eprintln!("[dApp-IPC] Request from {}: {} {:?}", origin, method, params);
+    eprintln!("[dApp-IPC] Request - window_label: '{}', origin: '{}', method: {}, params: {:?}", 
+        window_label, origin, method, params);
 
     // Use existing RPC handler
     let result = dapp::rpc_handler::handle_request(

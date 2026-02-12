@@ -567,16 +567,9 @@ pub async fn clear_all_approvals(
 
 
 // ============================================================================
-// WebSocket Management Commands
+// Performance Monitoring Commands
 // ============================================================================
 
-/// Get WebSocket server port
-///
-/// Returns the dynamically assigned WebSocket server port.
-/// Provider scripts can use this to discover the correct port to connect to.
-///
-/// # Arguments
-///
 /// Get performance profiling statistics
 ///
 /// Returns performance statistics for all RPC methods including

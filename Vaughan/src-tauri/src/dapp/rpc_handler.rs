@@ -153,6 +153,8 @@ async fn handle_accounts(
     window_label: &str,
     origin: &str,
 ) -> Result<Value, WalletError> {
+    eprintln!("[RPC] eth_accounts - Looking for session with window_label: '{}', origin: '{}'", window_label, origin);
+    
     // Check if connected for this window
     if let Some(connection) = state.session_manager.get_session_by_window(window_label, origin).await {
         let accounts: Vec<String> = connection
@@ -167,7 +169,12 @@ async fn handle_accounts(
         Ok(serde_json::json!(accounts))
     } else {
         // Not connected - return empty array
-        eprintln!("[RPC] eth_accounts - No session found for window: {}", window_label);
+        eprintln!("[RPC] eth_accounts - No session found for window: '{}', origin: '{}'", window_label, origin);
+        
+        // Debug: List all sessions
+        let all_sessions = state.session_manager.all_sessions().await;
+        eprintln!("[RPC] eth_accounts - All sessions: {:?}", all_sessions);
+        
         Ok(serde_json::json!([]))
     }
 }

@@ -51,7 +51,7 @@
 
 use crate::chains::evm::EvmAdapter;
 use crate::core::{NetworkService, PriceService, TransactionService, WalletService};
-use crate::dapp::{ApprovalQueue, HealthMonitor, RateLimiter, SessionManager, WindowRegistry};
+use crate::dapp::{ApprovalQueue, RateLimiter, SessionManager, WindowRegistry};
 use crate::error::WalletError;
 use alloy::primitives::Address;
 use std::collections::HashMap;
@@ -112,12 +112,6 @@ pub struct VaughanState {
     /// Window registry for tracking dApp windows
     pub window_registry: WindowRegistry,
 
-    /// WebSocket server port (dynamically assigned)
-    websocket_port: Mutex<Option<u16>>,
-
-    /// Health monitor for WebSocket server
-    pub health_monitor: HealthMonitor,
-
     /// Performance profiler for RPC requests
     pub profiler: crate::dapp::Profiler,
 }
@@ -165,8 +159,6 @@ impl VaughanState {
             rate_limiter: RateLimiter::new(), // Enhanced multi-tier rate limiter
             approval_queue: ApprovalQueue::new(),
             window_registry: WindowRegistry::new(),
-            websocket_port: Mutex::new(None),
-            health_monitor: HealthMonitor::new(),
             profiler: crate::dapp::Profiler::new(1000), // Keep last 1000 requests
         };
 
@@ -360,30 +352,6 @@ impl VaughanState {
     /// * `false` - Wallet is unlocked
     pub async fn is_locked(&self) -> bool {
         self.wallet_service.is_locked().await
-    }
-
-    // ========================================================================
-    // WebSocket Management
-    // ========================================================================
-
-    /// Set WebSocket server port
-    ///
-    /// # Arguments
-    ///
-    /// * `port` - WebSocket server port
-    pub async fn set_websocket_port(&self, port: u16) {
-        let mut ws_port = self.websocket_port.lock().await;
-        *ws_port = Some(port);
-    }
-
-    /// Get WebSocket server port
-    ///
-    /// # Returns
-    ///
-    /// * `Some(port)` - WebSocket server is running on port
-    /// * `None` - WebSocket server not started
-    pub async fn get_websocket_port(&self) -> Option<u16> {
-        *self.websocket_port.lock().await
     }
 
 }

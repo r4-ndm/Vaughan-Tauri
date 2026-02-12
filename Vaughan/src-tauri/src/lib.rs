@@ -17,7 +17,6 @@ pub mod core;
 pub mod dapp;
 pub mod error;
 pub mod models;
-pub mod proxy;  // HTTP proxy for dApp content
 pub mod security;
 pub mod state;
 
@@ -257,26 +256,6 @@ pub fn run() {
             app.manage(poc_state);
             println!("✅ POC state initialized (for reference)");
 
-            // Start HTTP proxy server for dApp content
-            println!("🌐 Starting HTTP proxy server...");
-            tauri::async_runtime::spawn(async {
-                proxy::start_proxy_server().await;
-            });
-            println!("✅ Proxy server started on http://localhost:8765");
-
-            // Start WebSocket server for external dApp communication
-            let app_handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                match dapp::websocket::start_websocket_server(app_handle).await {
-                    Ok(port) => {
-                        println!("✅ WebSocket server started on ws://127.0.0.1:{}", port);
-                    }
-                    Err(e) => {
-                        eprintln!("❌ Failed to start WebSocket server: {}", e);
-                    }
-                }
-            });
-
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -321,8 +300,6 @@ pub fn run() {
             commands::dapp::respond_to_approval,
             commands::dapp::cancel_approval,
             commands::dapp::clear_all_approvals,
-            commands::dapp::get_websocket_port,
-            commands::dapp::get_websocket_health,
             commands::dapp::get_performance_stats,
             // dApp IPC Command (1) - Phase 3.8: Tauri IPC Bridge
             commands::dapp_ipc::handle_dapp_request,

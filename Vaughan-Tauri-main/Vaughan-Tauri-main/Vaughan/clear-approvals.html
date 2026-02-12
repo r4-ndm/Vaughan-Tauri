@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Clear Approval Queue</title>
+</head>
+<body>
+    <h1>Clear Approval Queue</h1>
+    <button onclick="clearQueue()">Clear All Pending Approvals</button>
+    <div id="result"></div>
+    
+    <script type="module">
+        import { invoke } from '@tauri-apps/api/core';
+        
+        window.clearQueue = async function() {
+            try {
+                await invoke('clear_all_approvals');
+                document.getElementById('result').innerHTML = '<p style="color: green;">✅ Queue cleared successfully!</p>';
+            } catch (err) {
+                document.getElementById('result').innerHTML = '<p style="color: red;">❌ Error: ' + err + '</p>';
+            }
+        };
+    </script>
+</body>
+</html>

@@ -106,12 +106,6 @@ pub async fn open_dapp_window(
     // Get origin for registration
     let origin = validated_url.origin().ascii_serialization();
 
-    // Get WebSocket port from state
-    let ws_port = state.get_websocket_port().await
-        .ok_or_else(|| "WebSocket server not started".to_string())?;
-    
-    eprintln!("[Window] WebSocket server running on port: {}", ws_port);
-
     // Use provided init_script or default to PROVIDER_SCRIPT_IPC (CSP-safe via Tauri IPC)
     let provider_script = if let Some(script) = init_script {
         eprintln!("[Window] Using custom init_script ({} bytes)", script.len());

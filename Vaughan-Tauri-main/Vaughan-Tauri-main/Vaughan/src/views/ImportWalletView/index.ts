@@ -1,0 +1,1 @@
+export { ImportWalletView } from './ImportWalletView';

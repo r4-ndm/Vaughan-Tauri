@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple dApp Test - Vaughan Wallet</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        h1 {
+            color: #0f0;
+        }
+        button {
+            background: #0066ff;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            margin: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+        }
+        button:hover {
+            background: #0052cc;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        .result {
+            background: #2a2a2a;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border-left: 3px solid #0f0;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .error {
+            border-left-color: #f00;
+            color: #f00;
+        }
+        .status {
+            color: #888;
+            font-size: 14px;
+            margin: 10px 0;
+        }
+        .section {
+            margin: 30px 0;
+            padding: 20px;
+            background: #252525;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Simple dApp Test</h1>
+    <p class="status">Testing Vaughan Wallet Provider</p>
+
+    <div class="section">
+        <h2>1. Connect Wallet</h2>
+        <p class="status">First, connect the wallet to this dApp</p>
+        <button onclick="connectWallet()">Connect Wallet (eth_requestAccounts)</button>
+        <div id="connect-result" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h2>2. Check Provider</h2>
+        <button onclick="checkProvider()">Check window.ethereum</button>
+        <div id="provider-result" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h2>3. Get Accounts</h2>
+        <button onclick="getAccounts()">Get Accounts</button>
+        <div id="accounts-result" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h2>4. Send Transaction</h2>
+        <p class="status">This will trigger the approval modal!</p>
+        <button onclick="sendTransaction()" id="send-btn">Send 0.001 ETH</button>
+        <div id="tx-result" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h2>Console Log</h2>
+        <div id="console-log" class="result" style="max-height: 300px; overflow-y: auto;"></div>
+    </div>
+
+    <script>
+        const pendingRequests = new Map();
+
+        // Generate unique request ID
+        function generateRequestId() {
+            return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        }
+
+        function log(message, isError = false) {
+            const logDiv = document.getElementById('console-log');
+            if (!logDiv) return;
+            
+            const time = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.textContent = `[${time}] ${message}`;
+            if (isError) entry.style.color = '#f00';
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+
+        function showResult(elementId, content, isError = false) {
+            const el = document.getElementById(elementId);
+            if (!el) return;
+            
+            el.innerHTML = content;
+            el.className = isError ? 'result error' : 'result';
+        }
+
+        // Create window.ethereum provider
+        window.ethereum = {
+            isMetaMask: true,
+            isVaughan: true,
+            
+            request: async function({ method, params = [] }) {
+                return new Promise((resolve, reject) => {
+                    const id = generateRequestId();
+                    
+                    log(`📤 Request ${id.substr(0, 8)}...: ${method}`);
+                    
+                    // Store promise handlers
+                    pendingRequests.set(id, { resolve, reject });
+                    
+                    // Send request to parent window
+                    window.parent.postMessage({
+                        type: 'PROVIDER_REQUEST',
+                        data: {
+                            id,
+                            method,
+                            params
+                        }
+                    }, '*');
+                    
+                    // Timeout after 5 minutes
+                    setTimeout(() => {
+                        if (pendingRequests.has(id)) {
+                            pendingRequests.delete(id);
+                            reject(new Error('Request timeout'));
+                        }
+                    }, 300000);
+                });
+            }
+        };
+
+        // Listen for responses from parent
+        window.addEventListener('message', (event) => {
+            if (event.data.type === 'PROVIDER_RESPONSE') {
+                const { id, result, error } = event.data.data;
+                
+                const pending = pendingRequests.get(id);
+                if (!pending) return;
+                
+                pendingRequests.delete(id);
+                
+                if (error) {
+                    log(`❌ Response #${id}: ${error.message}`, true);
+                    pending.reject(error);
+                } else {
+                    log(`✅ Response #${id}: ${JSON.stringify(result)}`);
+                    pending.resolve(result);
+                }
+            }
+        });
+
+        // Initialize
+        window.addEventListener('DOMContentLoaded', () => {
+            log('🚀 dApp loaded!');
+            log('✅ window.ethereum provider created!');
+            checkProvider();
+        });
+
+        async function checkProvider() {
+            if (window.ethereum) {
+                showResult('provider-result', `
+                    ✅ window.ethereum exists!<br>
+                    isMetaMask: ${window.ethereum.isMetaMask}<br>
+                    isVaughan: ${window.ethereum.isVaughan}
+                `);
+                log('✅ Provider detected');
+            } else {
+                showResult('provider-result', '❌ window.ethereum not found!', true);
+                log('❌ Provider not found', true);
+            }
+        }
+
+        async function connectWallet() {
+            try {
+                log('Requesting wallet connection...');
+                const accounts = await window.ethereum.request({ 
+                    method: 'eth_requestAccounts' 
+                });
+                
+                if (accounts && accounts.length > 0) {
+                    showResult('connect-result', `
+                        ✅ Connected!<br>
+                        ${accounts.map((acc, i) => `Account ${i + 1}: ${acc}`).join('<br>')}
+                    `);
+                    log(`✅ Connected with ${accounts.length} account(s)`);
+                } else {
+                    showResult('connect-result', '⚠️ Connection failed - no accounts returned', true);
+                    log('⚠️ No accounts returned', true);
+                }
+            } catch (error) {
+                showResult('connect-result', `❌ Error: ${error.message}`, true);
+                log(`❌ Error: ${error.message}`, true);
+            }
+        }
+
+        async function getAccounts() {
+            try {
+                log('Getting accounts...');
+                const accounts = await window.ethereum.request({ 
+                    method: 'eth_accounts' 
+                });
+                
+                if (accounts && accounts.length > 0) {
+                    showResult('accounts-result', `
+                        ✅ Accounts found!<br>
+                        ${accounts.map((acc, i) => `Account ${i + 1}: ${acc}`).join('<br>')}
+                    `);
+                    log(`✅ Found ${accounts.length} account(s)`);
+                } else {
+                    showResult('accounts-result', '⚠️ No accounts found. Wallet may be locked.', true);
+                    log('⚠️ No accounts', true);
+                }
+            } catch (error) {
+                showResult('accounts-result', `❌ Error: ${error.message}`, true);
+                log(`❌ Error: ${error.message}`, true);
+            }
+        }
+
+        async function sendTransaction() {
+            const btn = document.getElementById('send-btn');
+            btn.disabled = true;
+            btn.textContent = 'Sending...';
+            
+            try {
+                log('🚀 Initiating transaction...');
+                
+                // Get accounts first
+                const accounts = await window.ethereum.request({ 
+                    method: 'eth_accounts' 
+                });
+                
+                if (!accounts || accounts.length === 0) {
+                    throw new Error('No accounts available. Please unlock wallet first.');
+                }
+                
+                const from = accounts[0];
+                const to = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0';
+                
+                log(`From: ${from}`);
+                log(`To: ${to}`);
+                log(`Amount: 0.001 ETH`);
+                log('⏳ Waiting for approval...');
+                
+                showResult('tx-result', '⏳ Waiting for approval modal...');
+                
+                const txHash = await window.ethereum.request({
+                    method: 'eth_sendTransaction',
+                    params: [{
+                        from: from,
+                        to: to,
+                        value: '0x38D7EA4C68000', // 0.001 ETH
+                        gas: '0x5208', // 21000
+                    }]
+                });
+                
+                showResult('tx-result', `
+                    ✅ Transaction sent!<br>
+                    <strong>Hash:</strong> ${txHash}<br>
+                    <br>
+                    Check the transaction on the blockchain explorer.
+                `);
+                log(`✅ Transaction hash: ${txHash}`);
+                
+            } catch (error) {
+                showResult('tx-result', `❌ Error: ${error.message || error}`, true);
+                log(`❌ Transaction failed: ${error.message || error}`, true);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Send 0.001 ETH';
+            }
+        }
+    </script>
+</body>
+</html>
