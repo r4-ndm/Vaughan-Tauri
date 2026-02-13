@@ -290,7 +290,7 @@ pub fn run() {
             commands::wallet::import_account,
             commands::wallet::delete_account,
             commands::wallet::set_active_account,
-            // dApp Commands (8) - Phase 3.1 + 3.2
+            // dApp Commands (9) - Phase 3.1 + 3.2
             commands::dapp::dapp_request,
             commands::dapp::connect_dapp,
             commands::dapp::disconnect_dapp,
@@ -301,6 +301,7 @@ pub fn run() {
             commands::dapp::cancel_approval,
             commands::dapp::clear_all_approvals,
             commands::dapp::get_performance_stats,
+            commands::dapp::launch_external_app,
             // dApp IPC Command (1) - Phase 3.8: Tauri IPC Bridge
             commands::dapp_ipc::handle_dapp_request,
             // Window Commands (6) - Phase 3.2 + 3.4 + 3.7

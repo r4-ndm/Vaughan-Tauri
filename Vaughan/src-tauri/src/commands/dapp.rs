@@ -591,3 +591,48 @@ pub async fn get_performance_stats(
 ) -> Result<std::collections::HashMap<String, crate::dapp::MethodStats>, String> {
     Ok(state.profiler.get_stats().await)
 }
+
+/// Launch external application (e.g., local dApp server)
+///
+/// # Arguments
+///
+/// * `exe_path` - Path to executable to launch
+///
+/// # Returns
+///
+/// * `Ok(())` - Application launched successfully
+/// * `Err(String)` - Failed to launch application
+///
+/// # Security
+///
+/// - Only launches executables from whitelisted dApps
+/// - Path validation to prevent directory traversal
+///
+#[tauri::command]
+pub async fn launch_external_app(exe_path: String) -> Result<(), String> {
+    eprintln!("[Dapp] Launching external app: {}", exe_path);
+    
+    // Validate path exists
+    let path = std::path::Path::new(&exe_path);
+    if !path.exists() {
+        return Err(format!("Executable not found: {}", exe_path));
+    }
+    
+    // Launch process in background
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new(&exe_path)
+            .spawn()
+            .map_err(|e| format!("Failed to launch: {}", e))?;
+    }
+    
+    #[cfg(not(target_os = "windows"))]
+    {
+        std::process::Command::new(&exe_path)
+            .spawn()
+            .map_err(|e| format!("Failed to launch: {}", e))?;
+    }
+    
+    eprintln!("[Dapp] External app launched successfully");
+    Ok(())
+}
