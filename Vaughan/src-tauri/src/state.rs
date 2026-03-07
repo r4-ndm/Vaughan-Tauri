@@ -61,6 +61,7 @@ use alloy::primitives::Address;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tracing::{debug, info};
 
 pub struct VaughanState {
     // ===== PROVIDER-INDEPENDENT SERVICES (Always Available) =====
@@ -116,10 +117,10 @@ pub struct VaughanState {
 
 impl VaughanState {
     pub async fn new() -> Result<Self, WalletError> {
-        println!("[VaughanState] Initializing...");
+        info!("[VaughanState] Initializing...");
         let state_manager = StateManager::new()?;
         let persisted = state_manager.load();
-        println!("[VaughanState] State loaded (version: {})", persisted.version);
+        debug!("[VaughanState] State loaded (version: {})", persisted.version);
 
         // Restore active account from persisted state
         let active_account = persisted
@@ -174,11 +175,11 @@ impl VaughanState {
             .unwrap_or_else(|| "https://rpc.v4.testnet.pulsechain.com".to_string());
         let chain_id = persisted.active_network_chain_id.unwrap_or(943);
 
-        println!("[VaughanState] Switching to initial network: {}", network_id);
+        info!("[VaughanState] Switching to initial network: {}", network_id);
         state
             .switch_network(&network_id, &rpc_url, chain_id)
             .await?;
-        println!("[VaughanState] Initialization complete.");
+        info!("[VaughanState] Initialization complete.");
 
         Ok(state)
     }
@@ -223,7 +224,7 @@ impl VaughanState {
         rpc_url: &str,
         chain_id: u64,
     ) -> Result<(), WalletError> {
-        println!("[VaughanState] switch_network: {}", network_id);
+        debug!("[VaughanState] switch_network: {}", network_id);
         // Get or create EVM adapter
         let mut adapters = self.evm_adapters.lock().await;
 
@@ -240,9 +241,9 @@ impl VaughanState {
         drop(active_network);
 
         // Auto-save state
-        println!("[VaughanState] Auto-saving state (network switch)...");
+        debug!("[VaughanState] Auto-saving state (network switch)...");
         let _ = self.save_state().await;
-        println!("[VaughanState] State saved (network switch).");
+        debug!("[VaughanState] State saved.");
 
         Ok(())
     }
@@ -394,11 +395,8 @@ impl VaughanState {
     /// Called automatically on network/account changes.
     /// Silently ignores errors (non-critical operation).
     async fn save_state(&self) -> Result<(), WalletError> {
-        println!("[VaughanState] save_state: Acquiring locks...");
         let active_network = self.active_network.lock().await;
-        println!("[VaughanState] save_state: Acquired active_network lock");
         let active_account = self.active_account.lock().await;
-        println!("[VaughanState] save_state: Acquired active_account lock");
         let tracked_tokens_map = self.tracked_tokens.lock().await;
 
         // Look up RPC URL and chain ID from the active adapter
@@ -430,7 +428,7 @@ impl VaughanState {
         state.tracked_tokens = tracked_tokens_map.values().flat_map(|v| v.clone()).collect::<Vec<TrackedToken>>();
 
         let result = self.state_manager.save(&state);
-        println!("[VaughanState] save_state: Save complete (success: {})", result.is_ok());
+        debug!("[VaughanState] save_state complete (success: {})", result.is_ok());
         result
     }
 
