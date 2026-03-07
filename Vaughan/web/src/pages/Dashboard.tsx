@@ -160,6 +160,13 @@ export default function Dashboard() {
         }
     }, [network?.chain_id]);
 
+    // 🎯 Inform backend about the focused asset for optimized monitoring
+    useEffect(() => {
+        invoke("set_focused_asset", { asset: selectedAsset }).catch(err => {
+            console.warn("[Vaughan] Failed to sync focused asset to backend:", err);
+        });
+    }, [selectedAsset]);
+
     // 🔔 Listen for balance refresh signals from backend
     useEffect(() => {
         const unlistenRefresh = listen("refresh-balance", () => {

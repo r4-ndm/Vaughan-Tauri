@@ -606,3 +606,18 @@ pub async fn get_railgun_mnemonic(
     }
     state.wallet_service.get_railgun_mnemonic(&password).await
 }
+
+/// Set the currently focused asset for background monitoring
+///
+/// # Arguments
+///
+/// * `asset` - Asset identifier ("native" or token address)
+#[tauri::command]
+pub async fn set_focused_asset(
+    state: State<'_, VaughanState>,
+    asset: String,
+) -> Result<(), WalletError> {
+    let mut focused = state.focused_asset.lock().await;
+    *focused = Some(asset);
+    Ok(())
+}

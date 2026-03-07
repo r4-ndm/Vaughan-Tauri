@@ -104,6 +104,7 @@ pub fn run() {
             commands::wallet::export_mnemonic,
             commands::wallet::export_private_key,
             commands::wallet::get_railgun_mnemonic,
+            commands::wallet::set_focused_asset,
             // dApp Commands
             commands::dapp::dapp_request,
             commands::dapp::connect_dapp,

@@ -111,6 +111,10 @@ pub struct VaughanState {
     /// User-tracked custom tokens (grouped by Chain ID)
     pub tracked_tokens: Mutex<HashMap<u64, Vec<TrackedToken>>>,
 
+    /// The asset currently focused in the UI (e.g., "native" or token address)
+    /// Used by BalanceWatcher to optimize polling.
+    pub focused_asset: Mutex<Option<String>>,
+
     /// State persistence manager
     state_manager: StateManager,
 }
@@ -154,6 +158,7 @@ impl VaughanState {
             active_network: Mutex::new(None),
             active_account: Mutex::new(active_account),
             tracked_tokens: Mutex::new(tracked_tokens_map),
+            focused_asset: Mutex::new(None),
 
             // dApp services
             session_manager: SessionManager::new(),
