@@ -122,3 +122,7 @@ $RECYCLE.BIN/
 
 # Old Iced version (for reference during development)
 Vaughan-old/
+
+# Kiro
+.kiro/
+kiro/
