@@ -16,7 +16,7 @@ avoid-breaking-exported-api = true
 # in production modules.
 disallowed-methods = [
     # Disallow panic in production code
-    { path = "std::panic", reason = "panics should not occur in production" },
+    { path = "std::panic", reason = "panics should not occur in production", allow-invalid = true },
     
     # Disallow unsafe crypto operations
     { path = "std::ptr::write", reason = "use safe abstractions" },
