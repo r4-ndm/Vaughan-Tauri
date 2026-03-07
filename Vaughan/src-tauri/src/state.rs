@@ -247,39 +247,14 @@ impl VaughanState {
         Ok(())
     }
 
-    /// Set active chain by Chain ID
-    ///
-    /// Helper to find network config by chain ID and switch to it.
-    ///
-    /// # Arguments
-    ///
-    /// * `chain_id` - Chain ID (e.g., 1, 369)
     pub async fn set_active_chain(&self, chain_id: u64) -> Result<(), WalletError> {
-        println!("[VaughanState] set_active_chain: {}", chain_id);
-        
-        // Find network config for this chain ID
-        // In a real implementation, we would look this up from a configuration file/DB
-        // For now, we'll hardcode the known networks or look them up from a constant
-        
-        // TODO: Move this to a configuration service
-        let network_config = match chain_id {
-            1 => Some(("ethereum-mainnet", "https://eth.llamarpc.com")),
-            369 => Some(("pulsechain", "https://rpc.pulsechain.com")),
-            943 => Some(("pulsechain-testnet-v4", "https://rpc.v4.testnet.pulsechain.com")),
-            56 => Some(("bsc", "https://binance.llamarpc.com")),
-            137 => Some(("polygon", "https://polygon.llamarpc.com")),
-            8453 => Some(("base", "https://base.llamarpc.com")),
-            42161 => Some(("arbitrum", "https://arbitrum.llamarpc.com")),
-            43114 => Some(("avalanche", "https://api.avax.network/ext/bc/C/rpc")),
-            10 => Some(("optimism", "https://optimism.llamarpc.com")),
-            _ => None,
-        };
-        
-        if let Some((network_id, rpc_url)) = network_config {
-            self.switch_network(network_id, rpc_url, chain_id).await
-        } else {
-            Err(WalletError::UnsupportedNetwork(format!("Chain ID {} not supported", chain_id)))
-        }
+        let config = crate::chains::evm::networks::get_network_by_chain_id(chain_id)
+            .ok_or(WalletError::UnsupportedNetwork(format!(
+                "Chain ID {} not supported",
+                chain_id
+            )))?;
+        self.switch_network(&config.id, &config.rpc_url, config.chain_id)
+            .await
     }
 
     /// Get current network adapter

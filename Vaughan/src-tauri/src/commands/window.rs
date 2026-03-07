@@ -19,7 +19,7 @@ lazy_static! {
     /// This is the ACTIVE provider implementation - works with all sites including HTTPS
     /// Uses Tauri IPC instead of WebSocket, bypasses CSP via initialization_script
     static ref PROVIDER_SCRIPT_IPC: String = 
-        include_str!("../../../src/provider/provider-inject-ipc.js").to_string();
+        include_str!("provider-inject-ipc.js").to_string();
 }
 
 // ============================================================================

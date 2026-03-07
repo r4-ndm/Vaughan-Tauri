@@ -115,7 +115,7 @@ pub fn polygon_mainnet() -> EvmNetworkConfig {
         "polygon".to_string(),
         "Polygon Mainnet".to_string(),
         137,
-        "https://polygon-rpc.com".to_string(),
+        "https://polygon-bor-rpc.publicnode.com".to_string(),
         "MATIC".to_string(),
         "Polygon".to_string(),
     )

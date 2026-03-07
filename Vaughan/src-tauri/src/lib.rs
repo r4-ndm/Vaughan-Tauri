@@ -21,213 +21,9 @@ pub mod security;
 pub mod state;
 pub mod audio;
 
-use std::sync::Arc;
 use tauri::Manager;
-use tokio::sync::Mutex;
 
-// POC: Alloy imports (Phase 0 validation)
-use alloy::providers::{Provider, ProviderBuilder, RootProvider};
-use alloy::transports::http::{Client, Http};
-use std::collections::HashMap;
-use tauri::State;
 
-// ============================================================================
-// POC-1: Tauri 2.0 + Alloy Integration Test
-// ============================================================================
-// Validates: Tauri 2.0 and Alloy work together
-// Result: ✅ SUCCESS - Block 24378930 retrieved
-// Lesson: Use concrete type RootProvider<Http<Client>>, not Arc<dyn Provider>
-
-// NOTE: POC command commented out - production version in commands/network.rs
-/*
-#[tauri::command]
-async fn get_block_number() -> Result<String, String> {
-    println!("🔗 Connecting to Ethereum mainnet...");
-
-    let rpc_url = "https://eth.llamarpc.com";
-    let provider = ProviderBuilder::new()
-        .on_http(rpc_url.parse().map_err(|e| format!("Invalid URL: {}", e))?);
-
-    let block_number = provider
-        .get_block_number()
-        .await
-        .map_err(|e| format!("Failed to get block number: {}", e))?;
-
-    println!("✅ Latest block: {}", block_number);
-    Ok(format!("{}", block_number))
-}
-*/
-
-// ============================================================================
-// POC-2: Controller Lazy Initialization Test
-// ============================================================================
-// Validates: State management with cached controllers
-// Result: ✅ SUCCESS - Controllers cached correctly, no race conditions
-// Lesson: Arc<Mutex<HashMap>> pattern works perfectly for lazy init
-//
-// NOTE: This is POC code for reference. Production state is in state::VaughanState
-
-pub struct PocNetworkController {
-    provider: RootProvider<Http<Client>>,
-    network_id: String,
-}
-
-impl PocNetworkController {
-    pub async fn new(rpc_url: &str, network_id: String) -> Result<Self, String> {
-        let provider = ProviderBuilder::new()
-            .on_http(rpc_url.parse().map_err(|e| format!("Invalid URL: {}", e))?);
-
-        Ok(Self {
-            provider,
-            network_id,
-        })
-    }
-
-    pub async fn get_block_number(&self) -> Result<u64, String> {
-        self.provider
-            .get_block_number()
-            .await
-            .map_err(|e| format!("Failed to get block number: {}", e))
-    }
-
-    pub fn network_id(&self) -> &str {
-        &self.network_id
-    }
-}
-
-pub struct PocVaughanState {
-    controllers: Arc<Mutex<HashMap<String, Arc<PocNetworkController>>>>,
-}
-
-impl Default for PocVaughanState {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl PocVaughanState {
-    pub fn new() -> Self {
-        Self {
-            controllers: Arc::new(Mutex::new(HashMap::new())),
-        }
-    }
-
-    pub async fn get_or_create_controller(
-        &self,
-        network_id: &str,
-    ) -> Result<Arc<PocNetworkController>, String> {
-        let mut controllers = self.controllers.lock().await;
-
-        if let Some(controller) = controllers.get(network_id) {
-            println!("✅ Using cached controller for network: {}", network_id);
-            return Ok(Arc::clone(controller));
-        }
-
-        println!("🔨 Creating new controller for network: {}", network_id);
-
-        let rpc_url = match network_id {
-            "ethereum" => "https://eth.llamarpc.com",
-            "polygon" => "https://polygon-rpc.com",
-            _ => return Err(format!("Unknown network: {}", network_id)),
-        };
-
-        let controller =
-            Arc::new(PocNetworkController::new(rpc_url, network_id.to_string()).await?);
-        controllers.insert(network_id.to_string(), Arc::clone(&controller));
-
-        Ok(controller)
-    }
-
-    pub async fn controller_count(&self) -> usize {
-        self.controllers.lock().await.len()
-    }
-}
-
-#[tauri::command]
-async fn get_block_with_controller(
-    state: State<'_, Arc<Mutex<PocVaughanState>>>,
-    network_id: String,
-) -> Result<String, String> {
-    let state = state.lock().await;
-    let controller = state.get_or_create_controller(&network_id).await?;
-    let block_number = controller.get_block_number().await?;
-
-    Ok(format!(
-        "✅ Block: {} (Network: {})",
-        block_number,
-        controller.network_id()
-    ))
-}
-
-#[tauri::command]
-async fn get_controller_count(
-    state: State<'_, Arc<Mutex<PocVaughanState>>>,
-) -> Result<String, String> {
-    let state = state.lock().await;
-    let count = state.controller_count().await;
-    Ok(format!("📊 Cached controllers: {}", count))
-}
-
-// ============================================================================
-// POC-3: MetaMask Provider Injection Test
-// ============================================================================
-// Validates: dApp integration with window.ethereum provider
-// Result: ✅ SUCCESS - All 4 methods work (chainId, accounts, requestAccounts, blockNumber)
-// Lesson: Use window.__TAURI_INTERNALS__.invoke with wait loop for API availability
-
-#[tauri::command]
-async fn eth_request(
-    method: String,
-    _params: Vec<serde_json::Value>,
-) -> Result<serde_json::Value, String> {
-    println!("📥 eth_request called: {}", method);
-
-    match method.as_str() {
-        "eth_chainId" => {
-            // Return Ethereum mainnet chain ID
-            Ok(serde_json::json!("0x1"))
-        },
-        "eth_accounts" | "eth_requestAccounts" => {
-            // Return mock account
-            Ok(serde_json::json!([
-                "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
-            ]))
-        },
-        "eth_blockNumber" => {
-            // Get real block number from Ethereum
-            let rpc_url = "https://eth.llamarpc.com";
-            let provider = ProviderBuilder::new()
-                .on_http(rpc_url.parse().map_err(|e| format!("Invalid URL: {}", e))?);
-
-            let block_number = provider
-                .get_block_number()
-                .await
-                .map_err(|e| format!("Failed to get block number: {}", e))?;
-
-            Ok(serde_json::json!(format!("0x{:x}", block_number)))
-        },
-        _ => Err(format!("Unsupported method: {}", method)),
-    }
-}
-
-#[tauri::command]
-async fn open_dapp_test(app: tauri::AppHandle) -> Result<(), String> {
-    use tauri::WebviewWindowBuilder;
-
-    println!("🌐 Opening dApp test window...");
-
-    WebviewWindowBuilder::new(
-        &app,
-        "dapp-test",
-        tauri::WebviewUrl::App("dapp-test.html".into()),
-    )
-    .title("dApp Test")
-    .inner_size(800.0, 600.0)
-    .build()
-    .map_err(|e| format!("Failed to create window: {}", e))?;
-
-    Ok(())
-}
 
 // ============================================================================
 // Tauri App Setup
@@ -238,7 +34,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            // First: setup window correctly based on screen size (16:9, 80% height)
+            // First: setup window correctly based on screen size (golden ratio, 80% height)
             if let Some(window) = app.get_webview_window("main") {
                 if let Ok(Some(monitor)) = window.primary_monitor() {
                     let size = monitor.size();
@@ -380,10 +176,7 @@ pub fn run() {
             });
             println!("🔊 Balance watcher started");
 
-            // Initialize POC state (for reference commands)
-            let poc_state = Arc::new(Mutex::new(PocVaughanState::new()));
-            app.manage(poc_state);
-            println!("✅ POC state initialized (for reference)");
+
 
             Ok(())
         })
@@ -465,16 +258,7 @@ pub fn run() {
             commands::audio::get_sound_config,
             commands::audio::test_sound,
 
-            // ============================================================
-            // POC COMMANDS (Phase 0 - Reference Only)
-            // ============================================================
 
-            // POC-2: Controller lazy initialization
-            get_block_with_controller,
-            get_controller_count,
-            // POC-3: MetaMask provider injection
-            eth_request,
-            open_dapp_test,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
