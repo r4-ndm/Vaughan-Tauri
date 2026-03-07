@@ -453,11 +453,11 @@ mod tests {
             origin: "https://app.pulsex.com".to_string(),
         };
 
-        let (id1, rx1) = queue
+        let (_id1, rx1) = queue
             .add_request(window1.clone(), request_type.clone())
             .await
             .unwrap();
-        let (id2, rx2) = queue
+        let (_id2, rx2) = queue
             .add_request(window1.clone(), request_type.clone())
             .await
             .unwrap();

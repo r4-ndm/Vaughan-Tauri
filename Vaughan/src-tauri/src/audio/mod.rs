@@ -18,6 +18,7 @@ pub enum AlertSound {
     DappRequest,
     SecurityAlert,
     WalletUnlocked,
+    CoinDrop,
     Custom(String),
 }
 
@@ -144,6 +145,7 @@ impl SoundPlayer {
             AlertSound::DappRequest => "dapp_request.wav",
             AlertSound::SecurityAlert => "security_alert.wav",
             AlertSound::WalletUnlocked => "wallet_unlock.wav",
+            AlertSound::CoinDrop => "coin-drop.wav",
             AlertSound::Custom(name) => name.as_str(),
         };
 

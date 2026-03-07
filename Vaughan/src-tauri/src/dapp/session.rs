@@ -6,45 +6,12 @@
 ///! multiple windows connecting to the same origin independently.
 use crate::error::WalletError;
 use alloy::primitives::Address;
-use serde::{Deserialize, Serialize};
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-/// Session key: (window_label, origin)
-/// This ensures sessions are isolated per window
-pub type SessionKey = (String, String);
-
-/// dApp origin (e.g., "https://app.uniswap.org")
-pub type DappOrigin = String;
-
-/// dApp connection information
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DappConnection {
-    /// Window label (unique per window)
-    pub window_label: String,
-
-    /// dApp origin (e.g., "https://app.uniswap.org")
-    pub origin: String,
-
-    /// dApp name (if provided)
-    pub name: Option<String>,
-
-    /// dApp icon URL (if provided)
-    pub icon: Option<String>,
-
-    /// Connected accounts (addresses the dApp can see)
-    pub accounts: Vec<Address>,
-
-    /// Connection timestamp (Unix timestamp)
-    pub connected_at: u64,
-
-    /// Last activity timestamp (Unix timestamp)
-    pub last_activity: u64,
-
-    /// Auto-approved connection (wallet opened the dApp)
-    pub auto_approved: bool,
-}
+pub use crate::models::dapp::{DappConnection, DappOrigin, SessionKey};
 
 /// Session manager for dApp connections
 pub struct SessionManager {

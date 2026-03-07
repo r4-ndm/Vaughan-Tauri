@@ -49,37 +49,13 @@ use crate::security::{
 use alloy::primitives::Address;
 use alloy::signers::local::PrivateKeySigner;
 use secrecy::ExposeSecret;
-use serde::{Deserialize, Serialize};
+
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-/// Account information
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Account {
-    /// Account address
-    pub address: Address,
-
-    /// Account name (user-defined)
-    pub name: String,
-
-    /// Account type
-    pub account_type: AccountType,
-
-    /// Derivation index (for HD accounts)
-    pub index: Option<u32>,
-}
-
-/// Account type
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum AccountType {
-    /// HD account (derived from seed)
-    Hd,
-    /// Imported account (from private key)
-    Imported,
-}
+pub use crate::models::wallet::{Account, AccountType};
 
 /// Wallet Service
 ///

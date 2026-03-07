@@ -76,7 +76,7 @@ pub fn spawn(app_handle: AppHandle) {
                         );
                         if let Err(e) = state
                             .sound_player
-                            .play(audio::AlertSound::TransactionIncoming)
+                            .play(audio::AlertSound::CoinDrop)
                         {
                             warn!("[BalanceWatcher] Sound error: {}", e);
                         }
@@ -114,7 +114,7 @@ pub fn spawn(app_handle: AppHandle) {
                             );
                             if let Err(e) = state
                                 .sound_player
-                                .play(audio::AlertSound::TransactionIncoming)
+                                .play(audio::AlertSound::CoinDrop)
                             {
                                 warn!("[BalanceWatcher] Sound error: {}", e);
                             }

@@ -4,7 +4,7 @@
 ///!
 ///! **PHASE 3.4 UPDATE**: Window-specific security validation to prevent
 ///! cross-window attacks and origin spoofing.
-use crate::dapp::{rpc_handler, DappConnection};
+use crate::dapp::{rpc, DappConnection};
 use crate::error::WalletError;
 use crate::state::VaughanState;
 use serde::{Deserialize, Serialize};
@@ -336,8 +336,8 @@ pub async fn dapp_request(
     // Layer 6: Handle Request
     // ========================================================================
 
-    // Pass window_label to rpc_handler for approval routing
-    match rpc_handler::handle_request(
+    // Pass window_label to rpc for approval routing
+    match rpc::handle_request(
         &app,
         &state,
         &window_label,

@@ -40,7 +40,7 @@ pub async fn handle_dapp_request(
 
     // Use existing RPC handler
     let result =
-        dapp::rpc_handler::handle_request(&app, &*state, &window_label, &origin, &method, params)
+        dapp::rpc::handle_request(&app, &*state, &window_label, &origin, &method, params)
             .await;
 
     match result {
