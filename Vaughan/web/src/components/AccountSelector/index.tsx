@@ -49,7 +49,7 @@ export const AccountSelector: React.FC<AccountSelectorProps> = ({ currentAccount
             </button>
 
             {isOpen && (
-                <div className="absolute left-0 right-0 mt-1 origin-top bg-card border border-border shadow-lg z-40 rounded-b-lg">
+                <div className="absolute left-0 right-0 mt-1 origin-top bg-card border border-border shadow-lg z-[60] rounded-b-lg">
                     {accounts.map((acc) => (
                         <div
                             key={acc.address}

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ArrowLeft, ExternalLink, Globe, Search } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Layout } from "../components/Layout";
 import { NetworkSelector } from "../components/NetworkSelector";
@@ -16,6 +16,7 @@ interface DApp {
     icon?: string;
     category: string;
     launchExecutable?: string;
+    chains: number[];
 }
 
 interface Account {
@@ -45,6 +46,7 @@ const dapps: DApp[] = WHITELISTED_DAPPS.map(dapp => ({
     description: dapp.description,
     icon: dapp.icon,
     launchExecutable: dapp.launchExecutable,
+    chains: dapp.chains,
     // Capitalize category for display
     category: dapp.category.charAt(0).toUpperCase() + dapp.category.slice(1).replace('Defi', 'DeFi').replace('Nft', 'NFT').replace('Dex', 'DEX')
 }));
@@ -53,6 +55,8 @@ export default function DApps() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const [activeAccount, setActiveAccount] = useState<string | null>(null);
+    const [customUrl, setCustomUrl] = useState<string>("");
+    const [isLaunchingCustom, setIsLaunchingCustom] = useState(false);
 
     const { data: network, isLoading: isNetworkLoading } = useQuery({
         queryKey: ["network"],
@@ -128,6 +132,32 @@ export default function DApps() {
         }
     };
 
+    const handleCustomUrlSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!customUrl.trim()) return;
+
+        let formattedUrl = customUrl.trim();
+        // Auto prepending https:// if not present
+        if (!/^https?:\/\//i.test(formattedUrl)) {
+            formattedUrl = `https://${formattedUrl}`;
+        }
+
+        setIsLaunchingCustom(true);
+        try {
+            console.log(`Opening custom dApp URL: ${formattedUrl}`);
+            await invoke("open_dapp_window", {
+                url: formattedUrl,
+                title: new URL(formattedUrl).hostname // Use domain as title
+            });
+            setCustomUrl(""); // Clear input on success
+        } catch (error) {
+            console.error("Failed to open custom URL:", error);
+            alert(`Failed to open custom URL: ${error}`);
+        } finally {
+            setIsLaunchingCustom(false);
+        }
+    };
+
     if (isNetworkLoading || isAccountsLoading) {
         return (
             <Layout showActions={false}>
@@ -137,6 +167,10 @@ export default function DApps() {
             </Layout>
         );
     }
+
+    const filteredDapps = network
+        ? dapps.filter(dapp => dapp.chains.includes(network.chain_id))
+        : dapps;
 
     const getDAppIcon = (dapp: any) => {
         // If it's a URL or path, use it directly
@@ -184,7 +218,7 @@ export default function DApps() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                    {dapps.map((dapp) => (
+                    {filteredDapps.map((dapp) => (
                         <div
                             key={dapp.url}
                             onClick={() => handleOpenDApp(dapp)}
@@ -246,6 +280,38 @@ export default function DApps() {
                             </div>
                         </div>
                     ))}
+                </div>
+
+                {/* Custom URL Input Bar */}
+                <div className="pt-4 pb-8">
+                    <form
+                        onSubmit={handleCustomUrlSubmit}
+                        className="bg-card border border-border rounded-xl p-2 flex items-center gap-2 focus-within:border-primary/50 focus-within:shadow-[0_0_15px_rgba(var(--primary),0.2)] transition-all"
+                    >
+                        <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-secondary/50 text-muted-foreground shrink-0">
+                            <Globe className="w-5 h-5" />
+                        </div>
+                        <input
+                            type="text"
+                            value={customUrl}
+                            onChange={(e) => setCustomUrl(e.target.value)}
+                            placeholder="Enter any dApp URL (e.g., app.uniswap.org)..."
+                            className="flex-1 bg-transparent border-none outline-none text-sm placeholder:text-muted-foreground/50 px-2"
+                            disabled={isLaunchingCustom}
+                        />
+                        <button
+                            type="submit"
+                            disabled={!customUrl.trim() || isLaunchingCustom}
+                            className="bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2.5 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0 flex items-center gap-2"
+                        >
+                            {isLaunchingCustom ? (
+                                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                                <Search className="w-4 h-4" />
+                            )}
+                            Go
+                        </button>
+                    </form>
                 </div>
             </div>
         </Layout>

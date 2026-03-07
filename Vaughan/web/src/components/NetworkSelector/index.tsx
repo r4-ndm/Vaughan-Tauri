@@ -97,7 +97,7 @@ export const NetworkSelector: React.FC<NetworkSelectorProps> = ({
             </button>
 
             {isOpen && (
-                <div className="absolute left-0 right-0 mt-1 bg-card border border-border shadow-lg z-50">
+                <div className="absolute left-0 right-0 mt-1 bg-card border border-border shadow-lg z-[60]">
                     {supportedNetworks.map((network) => (
                         <button
                             key={network.id}

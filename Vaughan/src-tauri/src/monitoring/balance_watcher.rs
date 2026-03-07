@@ -26,6 +26,7 @@ pub fn spawn(app_handle: AppHandle) {
         let mut last_balance: Option<U256> = None;
         let mut last_token_balances: HashMap<Address, U256> = HashMap::new();
         let mut last_account: Option<Address> = None;
+        let mut last_chain_id: Option<u64> = None;
 
         loop {
             interval.tick().await;
@@ -65,6 +66,14 @@ pub fn spawn(app_handle: AppHandle) {
             };
             let provider = adapter.provider();
             let chain_id = adapter.chain_id();
+
+            // Reset baseline on network switch
+            if last_chain_id != Some(chain_id) {
+                debug!("[BalanceWatcher] Chain set: {}", chain_id);
+                last_balance = None;
+                last_token_balances.clear();
+                last_chain_id = Some(chain_id);
+            }
 
             // 1. Check native balance
             if let Ok(balance) = provider.get_balance(account).await {

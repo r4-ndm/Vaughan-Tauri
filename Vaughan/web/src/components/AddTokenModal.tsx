@@ -72,20 +72,28 @@ export function AddTokenModal({ isOpen, onClose, onTokenAdded }: AddTokenModalPr
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div className="bg-card w-full max-w-md rounded-xl border border-border shadow-xl p-6 relative animate-in fade-in zoom-in-95 duration-200">
-                <button
-                    onClick={onClose}
-                    className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                    <X className="w-5 h-5" />
-                </button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm" onClick={onClose}>
+            <div
+                className="bg-card w-full max-w-md rounded-xl border border-border shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+                onClick={(e) => e.stopPropagation()}
+            >
+                {/* Header */}
+                <div className="flex items-center justify-between p-4 border-b border-border/50">
+                    <h2 className="text-lg font-semibold flex items-center gap-2">
+                        Add Custom Token
+                    </h2>
+                    <button
+                        onClick={onClose}
+                        className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+                        disabled={isLoading}
+                    >
+                        <X size={18} />
+                    </button>
+                </div>
 
-                <h2 className="text-xl font-bold mb-4">Add Custom Token</h2>
-
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleSubmit} className="p-4 space-y-4">
                     <div className="space-y-2">
-                        <label className="text-sm font-medium text-muted-foreground">Token Contract Address</label>
+                        <label className="text-sm font-medium block">Token Contract Address</label>
                         <div className="relative">
                             <input
                                 type="text"
@@ -93,8 +101,9 @@ export function AddTokenModal({ isOpen, onClose, onTokenAdded }: AddTokenModalPr
                                 onChange={handleAddressChange}
                                 onBlur={handleBlur}
                                 placeholder="0x..."
-                                className="w-full bg-input border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary font-mono"
+                                className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary font-mono"
                                 disabled={isLoading}
+                                autoFocus
                             />
                             {isLoading && (
                                 <div className="absolute right-3 top-2.5">
@@ -103,45 +112,47 @@ export function AddTokenModal({ isOpen, onClose, onTokenAdded }: AddTokenModalPr
                             )}
                         </div>
                         {error && (
-                            <div className="flex items-center text-destructive text-sm mt-1">
-                                <AlertCircle className="w-4 h-4 mr-1.5" />
+                            <div className="flex items-center text-red-500 text-xs mt-1">
+                                <AlertCircle className="w-3.5 h-3.5 mr-1.5" />
                                 {error}
                             </div>
                         )}
                     </div>
 
                     {previewToken && (
-                        <div className="bg-secondary/20 rounded-lg p-3 border border-border">
+                        <div className="bg-secondary/30 rounded-lg p-3 border border-border/50">
                             <div className="flex items-start">
                                 <CheckCircle2 className="w-5 h-5 text-green-500 mt-0.5 mr-2" />
                                 <div>
                                     <h4 className="font-semibold text-sm">Token Found</h4>
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                        Symbol: <span className="text-foreground font-medium">{previewToken.symbol}</span>
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                        Name: <span className="text-foreground">{previewToken.name}</span>
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                        Decimals: {previewToken.decimals}
-                                    </p>
+                                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2">
+                                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Symbol</p>
+                                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Name</p>
+                                        <p className="text-xs font-medium text-foreground">{previewToken.symbol}</p>
+                                        <p className="text-xs text-foreground truncate">{previewToken.name}</p>
+
+                                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider mt-1">Decimals</p>
+                                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider mt-1">Network</p>
+                                        <p className="text-xs text-foreground">{previewToken.decimals}</p>
+                                        <p className="text-xs text-foreground">PulseChain</p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    <div className="flex justify-end pt-2">
+                    <div className="flex justify-end gap-3 pt-2">
                         <button
                             type="button"
                             onClick={onClose}
-                            className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground mr-2"
+                            className="px-4 py-2 text-sm font-medium hover:bg-secondary rounded-lg transition-colors"
                         >
                             Cancel
                         </button>
                         <button
                             type="submit"
                             disabled={isLoading || !address}
-                            className="bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            className="bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
                             {isLoading ? "Adding..." : "Add Token"}
                         </button>

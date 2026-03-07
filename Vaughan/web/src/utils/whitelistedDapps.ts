@@ -231,4 +231,15 @@ export const WHITELISTED_DAPPS: WhitelistedDapp[] = [
         verified: true,
         dateAdded: '2026-03-06',
     },
+    {
+        id: '0xcurv',
+        name: '0xCurv',
+        description: 'DeFi protocol and decentralized application.',
+        url: 'https://www.0xcurv.win/',
+        icon: '🌊',
+        category: 'defi',
+        chains: [369, 1],
+        verified: true,
+        dateAdded: '2026-03-07',
+    },
 ];

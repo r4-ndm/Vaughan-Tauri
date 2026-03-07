@@ -37,12 +37,12 @@
   }
 
   .dark {
-    /* Near-black background matching old Vaughan */
-    --background: 240 20% 5%;
+    /* Pure deep black background */
+    --background: 0 0% 0%;
     --foreground: 210 20% 90%;
 
-    /* Cards: slightly lighter than background */
-    --card: 240 15% 8%;
+    /* Cards: slightly elevated from pure black */
+    --card: 0 0% 4%;
     --card-foreground: 210 20% 90%;
 
     /* Popover */

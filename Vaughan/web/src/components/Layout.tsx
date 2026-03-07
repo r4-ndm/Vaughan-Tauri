@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { ActionButtons } from "./ActionButtons/ActionButtons";
 import { ApprovalModal } from "./ApprovalModal";
+import { WatchAssetModal } from "./WatchAssetModal";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 
@@ -50,6 +51,7 @@ export function Layout({ children, showActions = true }: LayoutProps) {
             )}
 
             <ApprovalModal />
+            <WatchAssetModal />
         </div>
     );
 }

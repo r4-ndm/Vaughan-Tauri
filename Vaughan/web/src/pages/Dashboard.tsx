@@ -4,10 +4,10 @@ import { listen } from "@tauri-apps/api/event";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Layout } from "../components/Layout";
-import { BalanceDisplay } from "../components/BalanceDisplay";
 import { NetworkSelector } from "../components/NetworkSelector";
 import { AccountSelector } from "../components/AccountSelector";
-import { ChevronDown } from "lucide-react";
+import { AddressDisplay } from "../components/AddressDisplay";
+
 import {
     getTrackedTokens,
     getTokenBalance,
@@ -20,6 +20,8 @@ import { ShieldModal } from "../components/PrivacyModals/ShieldModal";
 import { UnshieldModal } from "../components/PrivacyModals/UnshieldModal";
 import { TransferModal } from "../components/PrivacyModals/TransferModal";
 import { ZkProofLoader } from "../components/PrivacyModals/ZkProofLoader";
+import { AddTokenModal } from "../components/AddTokenModal";
+
 
 interface Account {
     address: string;
@@ -64,6 +66,10 @@ export default function Dashboard() {
     // Privacy Worker State
     const [zkProgress, setZkProgress] = useState(0);
     const [zkProofActive, setZkProofActive] = useState(false);
+
+    // Token Modal State
+    const [addTokenOpen, setAddTokenOpen] = useState(false);
+
 
     useEffect(() => {
         PreferencesService.getUserPreferences().then(prefs => {
@@ -156,7 +162,7 @@ export default function Dashboard() {
 
     // 🔔 Listen for balance refresh signals from backend
     useEffect(() => {
-        const unlisten = listen("refresh-balance", () => {
+        const unlistenRefresh = listen("refresh-balance", () => {
             console.log("[Dashboard] Refreshing balances due to backend signal");
             queryClient.invalidateQueries({ queryKey: ["balance"] });
             queryClient.invalidateQueries({ queryKey: ["tracked_tokens"] });
@@ -164,9 +170,10 @@ export default function Dashboard() {
         });
 
         return () => {
-            unlisten.then(f => f());
+            unlistenRefresh.then(f => f());
         };
     }, [queryClient]);
+
 
     const { data: balance, isLoading: isBalanceLoading } = useQuery({
         queryKey: ["balance", activeAccount, network?.chain_id],
@@ -192,13 +199,8 @@ export default function Dashboard() {
         return parseFloat(num.toFixed(6)).toString();
     };
 
-    // Shielded Balances currently unimplemented locally but mapped out
     const displayBalance = isShieldMode ? "0.00" : formatBalance(balance?.balance_eth);
     const displaySymbol = isShieldMode ? `${balance?.symbol || "ETH"} (zk)` : balance?.symbol || "ETH";
-
-    const copyToClipboard = (text: string) => {
-        navigator.clipboard.writeText(text);
-    };
 
     const handleSendClick = (e: React.FormEvent) => {
         e.preventDefault();
@@ -218,20 +220,9 @@ export default function Dashboard() {
         });
     };
 
-    const handleAddCustomToken = async (e: React.MouseEvent) => {
+    const handleAddCustomToken = (e: React.MouseEvent) => {
         e.preventDefault(); // Prevent standard right-click menu
-
-        const tokenAddr = window.prompt("Enter the Contract Address of the ERC20 Token to track:");
-        if (!tokenAddr || tokenAddr.trim() === "") return;
-
-        try {
-            // We cast state token response back down implicitly if we wanted to
-            await invoke("add_custom_token", { tokenAddress: tokenAddr.trim() });
-            queryClient.invalidateQueries({ queryKey: ["tracked_tokens"] });
-            alert("Custom token tracked successfully!");
-        } catch (err: any) {
-            alert(`Failed to add custom token: ${err}`);
-        }
+        setAddTokenOpen(true);
     };
 
     if (isNetworkLoading || isAccountsLoading) {
@@ -245,26 +236,80 @@ export default function Dashboard() {
     return (
         <Layout showActions={true}>
             <div className={`space-y-4 transition-colors duration-500 ${isShieldMode ? "bg-primary/5 rounded-xl border border-primary/20 p-2" : ""}`}>
-                <BalanceDisplay
-                    balance={displayBalance}
-                    symbol={displaySymbol}
-                    address={activeAccount || undefined}
-                    isLoading={isBalanceLoading}
-                    onCopyAddress={copyToClipboard}
-                >
-                    <div className="flex gap-2 w-full justify-center py-2">
+
+                <AddressDisplay address={activeAccount || undefined} />
+
+                {/* Selectors Row */}
+                <div className="flex gap-2 w-full pt-2">
+                    <div className="flex-1 min-w-0 [&>button]:w-full">
                         <NetworkSelector
                             currentNetwork={network}
                             supportedNetworks={supportedNetworks || []}
                             onSwitchNetwork={handleSwitchNetwork}
                         />
+                    </div>
+                    <div className="flex-1 min-w-0 [&>button]:w-full [&>div]:w-full">
                         <AccountSelector
                             currentAccount={accounts?.find(a => a.address === activeAccount)}
                             accounts={accounts || []}
                             onSelectAccount={handleSelectAccount}
                         />
                     </div>
-                </BalanceDisplay>
+                </div>
+
+                {/* Assets Dropdown — replaced the old Native Balance Box */}
+                <div className="bg-card border border-border relative z-40">
+                    <button
+                        onClick={() => setAssetsOpen(!assetsOpen)}
+                        onContextMenu={handleAddCustomToken}
+                        title="Right click to add Custom Token"
+                        className="w-full hover:bg-secondary transition-colors"
+                    >
+                        <SelectedAssetDisplay
+                            selectedAsset={selectedAsset}
+                            nativeSymbol={displaySymbol}
+                            nativeBalance={isBalanceLoading ? "..." : displayBalance}
+                            tokens={tokens}
+                            activeAccount={activeAccount}
+                        />
+                    </button>
+
+                    {assetsOpen && (
+                        <div className="absolute left-0 right-0 top-full mt-1 border border-border bg-card overflow-hidden shadow-lg z-50">
+                            <button
+                                onClick={() => {
+                                    setSelectedAsset("native");
+                                    setSelectedSymbol(displaySymbol);
+                                    setAssetsOpen(false);
+                                }}
+                                className={`w-full px-4 py-2 grid grid-cols-2 items-center text-sm border-b border-border/50 hover:bg-secondary transition-colors text-left ${selectedAsset === "native" ? "bg-secondary/50" : ""}`}
+                            >
+                                <span className="font-bold">{displaySymbol}</span>
+                                <span className="text-muted-foreground text-right">{displayBalance}</span>
+                            </button>
+
+                            {tokens?.map((token) => (
+                                <TokenRow
+                                    key={`${token.chain_id}-${token.address}`}
+                                    token={token}
+                                    account={activeAccount}
+                                    isSelected={selectedAsset === token.address}
+                                    onSelect={() => {
+                                        setSelectedAsset(token.address);
+                                        setSelectedSymbol(token.symbol);
+                                        setAssetsOpen(false);
+                                    }}
+                                />
+                            ))}
+
+                            {(!tokens || tokens.length === 0) && (
+                                <div className="px-4 py-2 text-sm text-muted-foreground text-center">
+                                    No custom tokens tracked
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
 
                 {/* Privacy Action Row (only rendered if Privacy Mode was enabled at unlock) */}
                 {privacyEnabled && (
@@ -339,60 +384,6 @@ export default function Dashboard() {
                     </form>
                 </div>
 
-                {/* Assets Dropdown — shows selected asset */}
-                <div className="bg-card border border-border">
-                    <button
-                        onClick={() => setAssetsOpen(!assetsOpen)}
-                        onContextMenu={handleAddCustomToken}
-                        title="Right click to add Custom Token"
-                        className="w-full px-4 py-2.5 flex items-center justify-between text-sm font-medium hover:bg-secondary transition-colors"
-                    >
-                        <SelectedAssetDisplay
-                            selectedAsset={selectedAsset}
-                            nativeSymbol={balance?.symbol || "ETH"}
-                            nativeBalance={formatBalance(balance?.balance_eth)}
-                            tokens={tokens}
-                            activeAccount={activeAccount}
-                        />
-                        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${assetsOpen ? 'rotate-180' : ''}`} />
-                    </button>
-
-                    {assetsOpen && (
-                        <div className="border-t border-border">
-                            <button
-                                onClick={() => {
-                                    setSelectedAsset("native");
-                                    setSelectedSymbol(balance?.symbol || "ETH");
-                                    setAssetsOpen(false);
-                                }}
-                                className={`w-full px-4 py-2.5 flex justify-between items-center text-sm border-b border-border/50 hover:bg-secondary transition-colors text-left ${selectedAsset === "native" ? "bg-secondary/50" : ""}`}
-                            >
-                                <span>{balance?.symbol || "ETH"}</span>
-                                <span className="text-muted-foreground">{formatBalance(balance?.balance_eth)} {balance?.symbol || "ETH"}</span>
-                            </button>
-
-                            {tokens?.map((token) => (
-                                <TokenRow
-                                    key={`${token.chain_id}-${token.address}`}
-                                    token={token}
-                                    account={activeAccount}
-                                    isSelected={selectedAsset === token.address}
-                                    onSelect={() => {
-                                        setSelectedAsset(token.address);
-                                        setSelectedSymbol(token.symbol);
-                                        setAssetsOpen(false);
-                                    }}
-                                />
-                            ))}
-
-                            {(!tokens || tokens.length === 0) && (
-                                <div className="px-4 py-2.5 text-sm text-muted-foreground">
-                                    No custom tokens tracked
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
             </div>
 
             {/* Render Privacy Modals */}
@@ -410,7 +401,7 @@ export default function Dashboard() {
                 railgunWalletID={railgunClient.railgunWalletID || null}
                 chainId={network?.chain_id}
                 nativeSymbol={network?.native_token?.symbol || "ETH"}
-                onRequiresProof={(active) => setZkProofActive(active)}
+                onRequiresProof={(active: boolean) => setZkProofActive(active)}
                 activeAccount={activeAccount}
             />
 
@@ -420,15 +411,26 @@ export default function Dashboard() {
                 railgunWalletID={railgunClient.railgunWalletID || null}
                 chainId={network?.chain_id}
                 nativeSymbol={network?.native_token?.symbol || "ETH"}
-                onRequiresProof={(active) => setZkProofActive(active)}
+                onRequiresProof={(active: boolean) => setZkProofActive(active)}
                 activeAccount={activeAccount}
             />
+
 
             <ZkProofLoader
                 isOpen={zkProofActive}
                 progress={zkProgress}
             />
+
+            <AddTokenModal
+                isOpen={addTokenOpen}
+                onClose={() => setAddTokenOpen(false)}
+                onTokenAdded={() => {
+                    queryClient.invalidateQueries({ queryKey: ["tracked_tokens"] });
+                }}
+            />
         </Layout>
+
+
     );
 }
 
@@ -448,16 +450,16 @@ function SelectedAssetDisplay({
 }) {
     if (selectedAsset === "native") {
         return (
-            <span className="flex items-center gap-3">
-                <span>{nativeSymbol}</span>
-                <span className="text-muted-foreground">{nativeBalance} {nativeSymbol}</span>
-            </span>
+            <div className="w-full px-4 py-2 grid grid-cols-2 items-center">
+                <span className="font-bold text-left">{nativeSymbol}</span>
+                <span className="text-muted-foreground text-right">{nativeBalance}</span>
+            </div>
         );
     }
 
     const token = tokens?.find(t => t.address === selectedAsset);
     if (!token) {
-        return <span className="text-muted-foreground">Select asset</span>;
+        return <div className="w-full px-4 py-2 text-muted-foreground text-left">Select asset</div>;
     }
 
     return <SelectedTokenDisplay token={token} account={activeAccount} />;
@@ -475,10 +477,10 @@ function SelectedTokenDisplay({ token, account }: { token: TrackedToken; account
         : "0.00";
 
     return (
-        <span className="flex items-center gap-3">
-            <span>{token.symbol}</span>
-            <span className="text-muted-foreground">{bal} {token.symbol}</span>
-        </span>
+        <div className="w-full px-4 py-2 grid grid-cols-2 items-center">
+            <span className="font-bold text-left">{token.symbol}</span>
+            <span className="text-muted-foreground text-right">{bal}</span>
+        </div>
     );
 }
 
@@ -488,6 +490,8 @@ function TokenRow({ token, account, isSelected, onSelect }: {
     isSelected?: boolean;
     onSelect?: () => void;
 }) {
+    const [copied, setCopied] = useState(false);
+
     const { data: balanceData, isLoading } = useQuery({
         queryKey: ["token_balance", token.address, account],
         queryFn: () => account ? getTokenBalance(token.address, account) : null,
@@ -503,14 +507,30 @@ function TokenRow({ token, account, isSelected, onSelect }: {
         return parseFloat(num.toFixed(6)).toString();
     };
 
+    const handleContextMenu = async (e: React.MouseEvent) => {
+        e.preventDefault();
+        try {
+            await navigator.clipboard.writeText(token.address);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch (err) {
+            console.error('Failed to copy text: ', err);
+        }
+    };
+
     return (
         <button
             onClick={onSelect}
-            className={`w-full px-4 py-2.5 flex justify-between items-center text-sm border-b border-border/50 last:border-0 hover:bg-secondary transition-colors text-left ${isSelected ? "bg-secondary/50" : ""}`}
+            onContextMenu={handleContextMenu}
+            className={`w-full px-4 py-2 grid grid-cols-2 items-center text-sm border-b border-border/50 last:border-0 hover:bg-secondary transition-colors text-left ${isSelected ? "bg-secondary/50" : ""}`}
+            title="Right click to copy address"
         >
-            <span>{token.symbol}</span>
-            <span className="text-muted-foreground">
-                {isLoading ? "..." : formatTokenBalance(balanceData?.balance_formatted)} {token.symbol}
+            <span className="font-bold flex items-center gap-2">
+                {token.symbol}
+                {copied && <span className="text-xs text-green-500 font-normal">Copied!</span>}
+            </span>
+            <span className="text-muted-foreground text-right">
+                {isLoading ? "..." : formatTokenBalance(balanceData?.balance_formatted)}
             </span>
         </button>
     );
