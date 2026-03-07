@@ -166,7 +166,7 @@ impl StateManager {
                     e
                 );
                 PersistedState::default()
-            }
+            },
         }
     }
 
@@ -178,9 +178,8 @@ impl StateManager {
             ));
         }
 
-        let contents = fs::read_to_string(&self.state_path).map_err(|e| {
-            WalletError::InternalError(format!("Failed to read state file: {}", e))
-        })?;
+        let contents = fs::read_to_string(&self.state_path)
+            .map_err(|e| WalletError::InternalError(format!("Failed to read state file: {}", e)))?;
 
         let state: PersistedState = serde_json::from_str(&contents).map_err(|e| {
             WalletError::InternalError(format!("Failed to parse state file: {}", e))
@@ -205,9 +204,8 @@ impl StateManager {
     /// Uses atomic write (write to temp file, then rename) to prevent
     /// corruption from crashes or power loss.
     pub fn save(&self, state: &PersistedState) -> Result<(), WalletError> {
-        let json = serde_json::to_string_pretty(state).map_err(|e| {
-            WalletError::InternalError(format!("Failed to serialize state: {}", e))
-        })?;
+        let json = serde_json::to_string_pretty(state)
+            .map_err(|e| WalletError::InternalError(format!("Failed to serialize state: {}", e)))?;
 
         // Atomic write: write to .tmp then rename
         let tmp_path = self.state_path.with_extension("json.tmp");
@@ -300,7 +298,10 @@ mod tests {
         let loaded = manager.load();
         assert_eq!(loaded.active_network_id, state.active_network_id);
         assert_eq!(loaded.active_network_rpc, state.active_network_rpc);
-        assert_eq!(loaded.active_network_chain_id, state.active_network_chain_id);
+        assert_eq!(
+            loaded.active_network_chain_id,
+            state.active_network_chain_id
+        );
         assert_eq!(loaded.active_account, state.active_account);
         assert_eq!(loaded.preferences.theme, "light");
 

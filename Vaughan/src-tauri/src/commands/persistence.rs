@@ -12,9 +12,7 @@ use tauri::State;
 /// Returns the raw JSON content of the state file.
 /// Useful for debugging or backups.
 #[tauri::command]
-pub async fn export_state(
-    state: State<'_, VaughanState>,
-) -> Result<PersistedState, WalletError> {
+pub async fn export_state(state: State<'_, VaughanState>) -> Result<PersistedState, WalletError> {
     Ok(state.state_manager().load())
 }
 

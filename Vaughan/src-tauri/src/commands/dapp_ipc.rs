@@ -1,9 +1,8 @@
+use crate::dapp;
 ///! dApp IPC Command Handler
 ///!
 ///! Handles RPC requests from dApps via Tauri IPC (postMessage bridge)
-
 use crate::state::VaughanState;
-use crate::dapp;
 use serde_json::Value;
 use tauri::State;
 
@@ -34,28 +33,24 @@ pub async fn handle_dapp_request(
     method: String,
     params: Vec<Value>,
 ) -> Result<Value, String> {
-    eprintln!("[dApp-IPC] Request - window_label: '{}', origin: '{}', method: {}, params: {:?}", 
-        window_label, origin, method, params);
+    eprintln!(
+        "[dApp-IPC] Request - window_label: '{}', origin: '{}', method: {}, params: {:?}",
+        window_label, origin, method, params
+    );
 
     // Use existing RPC handler
-    let result = dapp::rpc_handler::handle_request(
-        &app,
-        &*state,
-        &window_label,
-        &origin,
-        &method,
-        params,
-    )
-    .await;
+    let result =
+        dapp::rpc_handler::handle_request(&app, &*state, &window_label, &origin, &method, params)
+            .await;
 
     match result {
         Ok(value) => {
             eprintln!("[dApp-IPC] Success: {:?}", value);
             Ok(value)
-        }
+        },
         Err(e) => {
             eprintln!("[dApp-IPC] Error: {}", e);
             Err(e.to_string())
-        }
+        },
     }
 }

@@ -1,6 +1,6 @@
-use wiremock::{MockServer, Mock, ResponseTemplate};
-use wiremock::matchers::{method, body_string_contains};
 use serde_json::json;
+use wiremock::matchers::{body_string_contains, method};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 pub struct MockRpcServer {
     server: MockServer,

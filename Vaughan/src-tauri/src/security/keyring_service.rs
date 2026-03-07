@@ -57,7 +57,7 @@ impl KeyringService {
             service_name: service_name.into(),
         })
     }
-    
+
     /// Store a key in the OS keychain
     ///
     /// The key is encrypted with the password before storage.
@@ -75,21 +75,22 @@ impl KeyringService {
     ) -> Result<(), WalletError> {
         // Encrypt the private key
         let encrypted = encrypt_data(private_key.as_bytes(), password)?;
-        
+
         // Encode as base64 for storage
         let encoded = base64::encode(&encrypted);
-        
+
         // Store in keychain
-        let entry = Entry::new(&self.service_name, key_id)
-            .map_err(|e| WalletError::KeyringError(format!("Keyring entry creation failed: {}", e)))?;
-        
+        let entry = Entry::new(&self.service_name, key_id).map_err(|e| {
+            WalletError::KeyringError(format!("Keyring entry creation failed: {}", e))
+        })?;
+
         entry
             .set_password(&encoded)
             .map_err(|e| WalletError::KeyringError(format!("Failed to store key: {}", e)))?;
-        
+
         Ok(())
     }
-    
+
     /// Retrieve a key from the OS keychain
     ///
     /// The key is decrypted with the password after retrieval.
@@ -108,43 +109,45 @@ impl KeyringService {
         password: &str,
     ) -> Result<Secret<String>, WalletError> {
         // Retrieve from keychain
-        let entry = Entry::new(&self.service_name, key_id)
-            .map_err(|e| WalletError::KeyringError(format!("Keyring entry creation failed: {}", e)))?;
-        
+        let entry = Entry::new(&self.service_name, key_id).map_err(|e| {
+            WalletError::KeyringError(format!("Keyring entry creation failed: {}", e))
+        })?;
+
         let encoded = entry
             .get_password()
             .map_err(|e| WalletError::KeyringError(format!("Failed to retrieve key: {}", e)))?;
-        
+
         // Decode from base64
         let encrypted = base64::decode(&encoded)
             .map_err(|e| WalletError::KeyringError(format!("Invalid base64 encoding: {}", e)))?;
-        
+
         // Decrypt
         let decrypted = decrypt_data(&encrypted, password)?;
-        
+
         // Convert to string
         let private_key = String::from_utf8(decrypted)
             .map_err(|e| WalletError::KeyringError(format!("Invalid UTF-8: {}", e)))?;
-        
+
         Ok(Secret::new(private_key))
     }
-    
+
     /// Delete a key from the OS keychain
     ///
     /// # Arguments
     ///
     /// * `key_id` - Unique identifier for the key
     pub fn delete_key(&self, key_id: &str) -> Result<(), WalletError> {
-        let entry = Entry::new(&self.service_name, key_id)
-            .map_err(|e| WalletError::KeyringError(format!("Keyring entry creation failed: {}", e)))?;
-        
+        let entry = Entry::new(&self.service_name, key_id).map_err(|e| {
+            WalletError::KeyringError(format!("Keyring entry creation failed: {}", e))
+        })?;
+
         entry
             .delete_password()
             .map_err(|e| WalletError::KeyringError(format!("Failed to delete key: {}", e)))?;
-        
+
         Ok(())
     }
-    
+
     /// Check if a key exists in the keychain
     ///
     /// # Arguments
@@ -155,10 +158,10 @@ impl KeyringService {
             Ok(e) => e,
             Err(_) => return false,
         };
-        
+
         entry.get_password().is_ok()
     }
-    
+
     /// List all key IDs stored in the keychain
     ///
     /// Note: This is a placeholder. The keyring crate doesn't provide
@@ -176,7 +179,7 @@ mod base64 {
         use base64ct::{Base64, Encoding};
         Base64::encode_string(data)
     }
-    
+
     pub fn decode(s: &str) -> Result<Vec<u8>, base64ct::Error> {
         use base64ct::{Base64, Encoding};
         Base64::decode_vec(s)
@@ -191,7 +194,7 @@ mod tests {
     fn test_keyring_service_creation() {
         let keyring = KeyringService::new("test-service").unwrap();
         assert_eq!(keyring.service_name, "test-service");
-        
+
         println!("✅ KeyringService creation works");
     }
 
@@ -201,17 +204,17 @@ mod tests {
         let key_id = "test_account_0";
         let private_key = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
         let password = "test_password_123";
-        
+
         // Store key
         keyring.store_key(key_id, private_key, password).unwrap();
-        
+
         // Retrieve key
         let retrieved = keyring.retrieve_key(key_id, password).unwrap();
         assert_eq!(retrieved.expose_secret(), private_key);
-        
+
         // Clean up
         keyring.delete_key(key_id).unwrap();
-        
+
         println!("✅ Store and retrieve key works");
     }
 
@@ -221,17 +224,17 @@ mod tests {
         let key_id = "test_account_1";
         let private_key = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210";
         let password = "correct_password";
-        
+
         // Store key
         keyring.store_key(key_id, private_key, password).unwrap();
-        
+
         // Try to retrieve with wrong password
         let result = keyring.retrieve_key(key_id, "wrong_password");
         assert!(result.is_err());
-        
+
         // Clean up
         keyring.delete_key(key_id).unwrap();
-        
+
         println!("✅ Wrong password is rejected");
     }
 
@@ -241,25 +244,25 @@ mod tests {
         let key_id = "test_account_2";
         let private_key = "1111111111111111111111111111111111111111111111111111111111111111";
         let password = "password";
-        
+
         // Clean up any leftover keys from previous test runs
         let _ = keyring.delete_key(key_id);
-        
+
         // Key should not exist initially
         assert!(!keyring.key_exists(key_id));
-        
+
         // Store key
         keyring.store_key(key_id, private_key, password).unwrap();
-        
+
         // Key should exist now
         assert!(keyring.key_exists(key_id));
-        
+
         // Delete key
         keyring.delete_key(key_id).unwrap();
-        
+
         // Key should not exist anymore
         assert!(!keyring.key_exists(key_id));
-        
+
         println!("✅ Key existence check works");
     }
 
@@ -267,11 +270,11 @@ mod tests {
     fn test_delete_nonexistent_key() {
         let keyring = KeyringService::new("test-vaughan-wallet-4").unwrap();
         let key_id = "nonexistent_key";
-        
+
         // Deleting nonexistent key should fail gracefully
         let result = keyring.delete_key(key_id);
         assert!(result.is_err());
-        
+
         println!("✅ Deleting nonexistent key fails gracefully");
     }
 }

@@ -48,10 +48,9 @@ pub fn run() {
 
             // Initialize production VaughanState
             info!("Initializing Vaughan Wallet...");
-            let production_state = tauri::async_runtime::block_on(async {
-                state::VaughanState::new().await
-            })
-            .expect("Failed to initialize VaughanState");
+            let production_state =
+                tauri::async_runtime::block_on(async { state::VaughanState::new().await })
+                    .expect("Failed to initialize VaughanState");
 
             app.manage(production_state);
             info!("VaughanState initialized");

@@ -46,7 +46,7 @@ pub fn spawn(app_handle: AppHandle) {
                     last_balance = None;
                     last_token_balances.clear();
                     continue;
-                }
+                },
             };
             if last_account != Some(account) {
                 debug!("[BalanceWatcher] Account set: {:?}", account);
@@ -61,7 +61,7 @@ pub fn spawn(app_handle: AppHandle) {
                 Err(e) => {
                     debug!("[BalanceWatcher] No adapter: {:?}", e);
                     continue;
-                }
+                },
             };
             let provider = adapter.provider();
             let chain_id = adapter.chain_id();
@@ -74,17 +74,18 @@ pub fn spawn(app_handle: AppHandle) {
                             "[BalanceWatcher] Native incoming detected: {} -> {}",
                             prev, balance
                         );
-                        if let Err(e) =
-                            state.sound_player.play(audio::AlertSound::TransactionIncoming)
+                        if let Err(e) = state
+                            .sound_player
+                            .play(audio::AlertSound::TransactionIncoming)
                         {
                             warn!("[BalanceWatcher] Sound error: {}", e);
                         }
                         let _ = app_handle.emit("refresh-balance", ());
-                    }
+                    },
                     None => {
                         debug!("[BalanceWatcher] Native baseline set: {}", balance);
-                    }
-                    _ => {}
+                    },
+                    _ => {},
                 }
                 last_balance = Some(balance);
             }
@@ -111,8 +112,9 @@ pub fn spawn(app_handle: AppHandle) {
                                 "[BalanceWatcher] Token incoming: {} {} -> {}",
                                 token.symbol, prev, balance
                             );
-                            if let Err(e) =
-                                state.sound_player.play(audio::AlertSound::TransactionIncoming)
+                            if let Err(e) = state
+                                .sound_player
+                                .play(audio::AlertSound::TransactionIncoming)
                             {
                                 warn!("[BalanceWatcher] Sound error: {}", e);
                             }

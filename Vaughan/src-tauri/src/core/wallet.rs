@@ -184,12 +184,14 @@ impl WalletService {
 
         let mut accounts = self.accounts.write().await;
         accounts.insert(address, account.clone());
-        
+
         // Persist account list to keyring
         let account_list: Vec<Account> = accounts.values().cloned().collect();
-        let accounts_json = serde_json::to_string(&account_list)
-            .map_err(|e| WalletError::InternalError(format!("Failed to serialize accounts: {}", e)))?;
-        self.keyring.store_key("accounts", &accounts_json, password)?;
+        let accounts_json = serde_json::to_string(&account_list).map_err(|e| {
+            WalletError::InternalError(format!("Failed to serialize accounts: {}", e))
+        })?;
+        self.keyring
+            .store_key("accounts", &accounts_json, password)?;
 
         // Wallet is still locked - user must unlock
         Ok(mnemonic)
@@ -252,12 +254,14 @@ impl WalletService {
             accounts.insert(address, account);
             addresses.push(address);
         }
-        
+
         // Persist account list to keyring
         let account_list: Vec<Account> = accounts.values().cloned().collect();
-        let accounts_json = serde_json::to_string(&account_list)
-            .map_err(|e| WalletError::InternalError(format!("Failed to serialize accounts: {}", e)))?;
-        self.keyring.store_key("accounts", &accounts_json, password)?;
+        let accounts_json = serde_json::to_string(&account_list).map_err(|e| {
+            WalletError::InternalError(format!("Failed to serialize accounts: {}", e))
+        })?;
+        self.keyring
+            .store_key("accounts", &accounts_json, password)?;
 
         Ok(addresses)
     }
@@ -310,11 +314,13 @@ impl WalletService {
         if self.keyring.key_exists("accounts") {
             let accounts_json_secret = self.keyring.retrieve_key("accounts", password)?;
             let accounts_json = accounts_json_secret.expose_secret();
-            
+
             // Parse account list
-            let mut account_list: Vec<Account> = serde_json::from_str(accounts_json)
-                .map_err(|e| WalletError::InternalError(format!("Failed to parse accounts: {}", e)))?;
-            
+            let mut account_list: Vec<Account> =
+                serde_json::from_str(accounts_json).map_err(|e| {
+                    WalletError::InternalError(format!("Failed to parse accounts: {}", e))
+                })?;
+
             // MIGRATION: Ensure Master Wallet is identified and renamed
             let mut accounts_modified = false;
             for account in &mut account_list {
@@ -325,7 +331,7 @@ impl WalletService {
                             account.index = Some(0);
                             accounts_modified = true;
                         }
-                        
+
                         // Default names that should be upgraded to Master
                         if account.name == "HD Wallet 1" || account.name == "HD Wallet" {
                             account.name = "Master Wallet".to_string();
@@ -334,7 +340,7 @@ impl WalletService {
                     }
                 }
             }
-            
+
             // Load into cache
             let mut accounts = self.accounts.write().await;
             accounts.clear();
@@ -354,17 +360,18 @@ impl WalletService {
             // Reconstruct from seed by deriving accounts until we find all stored keys
             let seed_bytes = hex::decode(seed_hex)
                 .map_err(|e| WalletError::InternalError(format!("Invalid seed hex: {}", e)))?;
-            
+
             let mut accounts = self.accounts.write().await;
             accounts.clear();
-            
+
             // Try to derive up to 10 accounts and check if they exist in keyring
             for index in 0..10 {
-                let (_, address) = derive_account(&seed_bytes, index)
-                    .map_err(|e| WalletError::InternalError(format!("Failed to derive account: {}", e)))?;
-                
+                let (_, address) = derive_account(&seed_bytes, index).map_err(|e| {
+                    WalletError::InternalError(format!("Failed to derive account: {}", e))
+                })?;
+
                 let account_id = format!("account_{}", address);
-                
+
                 // Check if this account exists in keyring
                 if self.keyring.key_exists(&account_id) {
                     let name = if index == 0 {
@@ -372,7 +379,7 @@ impl WalletService {
                     } else {
                         format!("HD Wallet {}", index + 1)
                     };
-                    
+
                     let account = Account {
                         address,
                         name,
@@ -385,13 +392,15 @@ impl WalletService {
                     break;
                 }
             }
-            
+
             // Persist the reconstructed account list
             if !accounts.is_empty() {
                 let account_list: Vec<Account> = accounts.values().cloned().collect();
-                let accounts_json = serde_json::to_string(&account_list)
-                    .map_err(|e| WalletError::InternalError(format!("Failed to serialize accounts: {}", e)))?;
-                self.keyring.store_key("accounts", &accounts_json, password)?;
+                let accounts_json = serde_json::to_string(&account_list).map_err(|e| {
+                    WalletError::InternalError(format!("Failed to serialize accounts: {}", e))
+                })?;
+                self.keyring
+                    .store_key("accounts", &accounts_json, password)?;
             }
         }
 
@@ -459,18 +468,16 @@ impl WalletService {
                 // HD always comes before Imported
                 (AccountType::Hd, AccountType::Imported) => std::cmp::Ordering::Less,
                 (AccountType::Imported, AccountType::Hd) => std::cmp::Ordering::Greater,
-                
+
                 // If both are HD, sort by derivation index ASC
                 (AccountType::Hd, AccountType::Hd) => {
                     let idx_a = a.index.unwrap_or(u32::MAX);
                     let idx_b = b.index.unwrap_or(u32::MAX);
                     idx_a.cmp(&idx_b)
-                }
-                
+                },
+
                 // If both are Imported, sort alphabetically by name ASC
-                (AccountType::Imported, AccountType::Imported) => {
-                    a.name.cmp(&b.name)
-                }
+                (AccountType::Imported, AccountType::Imported) => a.name.cmp(&b.name),
             }
         });
 
@@ -564,8 +571,7 @@ impl WalletService {
 
         // Store in keychain
         let account_id = format!("account_{}", address);
-        self.keyring
-            .store_key(&account_id, private_key, password)?;
+        self.keyring.store_key(&account_id, private_key, password)?;
 
         // Add to accounts
         let account = Account {
@@ -617,14 +623,16 @@ impl WalletService {
     ) -> Result<(), WalletError> {
         // Validate inputs
         if new_name.trim().is_empty() {
-            return Err(WalletError::InternalError("Account name cannot be empty".to_string()));
+            return Err(WalletError::InternalError(
+                "Account name cannot be empty".to_string(),
+            ));
         }
 
         // Verify password first
         self.verify_password(password).await?;
 
         let mut accounts = self.accounts.write().await;
-        
+
         // Find and update the account in memory
         if let Some(account) = accounts.get_mut(address) {
             account.name = new_name;
@@ -634,10 +642,12 @@ impl WalletService {
 
         // Snapshot current accounts and persist to OS Keychain
         let account_list: Vec<Account> = accounts.values().cloned().collect();
-        let accounts_json = serde_json::to_string(&account_list)
-            .map_err(|e| WalletError::InternalError(format!("Failed to serialize accounts: {}", e)))?;
-        
-        self.keyring.store_key("accounts", &accounts_json, password)?;
+        let accounts_json = serde_json::to_string(&account_list).map_err(|e| {
+            WalletError::InternalError(format!("Failed to serialize accounts: {}", e))
+        })?;
+
+        self.keyring
+            .store_key("accounts", &accounts_json, password)?;
 
         Ok(())
     }
@@ -730,7 +740,7 @@ impl WalletService {
 
         // Extract raw private key bytes
         let bytes = signer.credential().to_bytes();
-        
+
         // Return encoded as hex string
         Ok(format!("0x{}", hex::encode(bytes)))
     }
@@ -743,10 +753,7 @@ impl WalletService {
     ///
     /// - Requires the wallet password to authorize derivation from the master seed.
     /// - Should be held ONLY in the WebWorker's memory.
-    pub async fn get_railgun_mnemonic(
-        &self,
-        password: &str,
-    ) -> Result<String, WalletError> {
+    pub async fn get_railgun_mnemonic(&self, password: &str) -> Result<String, WalletError> {
         // Must be unlocked
         if *self.locked.read().await {
             return Err(WalletError::WalletLocked);
@@ -775,7 +782,9 @@ impl WalletService {
         // Delete all accounts from keyring
         let accounts = self.get_accounts().await.unwrap_or_default();
         for account in accounts {
-            let _ = self.keyring.delete_key(&format!("account_{}", account.address));
+            let _ = self
+                .keyring
+                .delete_key(&format!("account_{}", account.address));
         }
 
         // Delete seed, mnemonic, and accounts list (ignore errors if they don't exist)
@@ -792,7 +801,7 @@ impl WalletService {
         // Clear memory
         self.accounts.write().await.clear();
         self.signers.write().await.clear();
-        
+
         // Lock wallet
         *self.locked.write().await = true;
 
@@ -815,7 +824,9 @@ mod tests {
         // Get all accounts
         if let Ok(accounts) = wallet.get_accounts().await {
             for account in accounts {
-                let _ = wallet.keyring.delete_key(&format!("account_{}", account.address));
+                let _ = wallet
+                    .keyring
+                    .delete_key(&format!("account_{}", account.address));
             }
         }
         // Delete seed

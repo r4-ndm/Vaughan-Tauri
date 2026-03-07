@@ -25,7 +25,7 @@ pub enum AlertSound {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SoundConfig {
     pub enabled: bool,
-    pub volume: f32, // 0.0 to 1.0
+    pub volume: f32,        // 0.0 to 1.0
     pub sound_pack: String, // "default", "minimal", "custom"
 }
 
@@ -69,28 +69,28 @@ impl SoundPlayer {
         // Audio streams in rodio must be kept alive while playing
         let config_clone = config.clone();
         let alert_clone = alert.clone();
-        
-        // We need to resolve the resource path relative to the app. 
+
+        // We need to resolve the resource path relative to the app.
         // For now, we assume a "sounds" directory next to the binary or in the datadir.
         // In a real Tauri app, we should use the `app_handle.path_resolver()`.
         // Since we are inside the core logic, we might need to pass the base path.
         // For this implementation, we'll try to find "sounds/" in the current working directory.
-        
+
         thread::spawn(move || {
             let (_stream, stream_handle) = match OutputStream::try_default() {
                 Ok(s) => s,
                 Err(e) => {
                     eprintln!("Failed to get default audio output: {}", e);
                     return;
-                }
+                },
             };
-            
+
             let sink = match Sink::try_new(&stream_handle) {
                 Ok(s) => s,
                 Err(e) => {
                     eprintln!("Failed to create audio sink: {}", e);
                     return;
-                }
+                },
             };
 
             let sound_file = match Self::get_sound_file(&alert_clone, &config_clone.sound_pack) {
@@ -98,7 +98,7 @@ impl SoundPlayer {
                 Err(e) => {
                     eprintln!("Failed to get sound file: {}", e);
                     return;
-                }
+                },
             };
 
             // Attempt to open the file
@@ -107,7 +107,7 @@ impl SoundPlayer {
                 Err(e) => {
                     eprintln!("Failed to open sound file {:?}: {}", sound_file, e);
                     return;
-                }
+                },
             };
 
             let reader = BufReader::new(file);
@@ -116,7 +116,7 @@ impl SoundPlayer {
                 Err(e) => {
                     eprintln!("Failed to decode sound file: {}", e);
                     return;
-                }
+                },
             };
 
             sink.set_volume(config_clone.volume);
@@ -154,7 +154,10 @@ impl SoundPlayer {
             // Running from src-tauri/ (cargo tauri dev)
             cwd.join("sounds").join(pack).join(filename),
             // Running from project root (Vaughan/)
-            cwd.join("src-tauri").join("sounds").join(pack).join(filename),
+            cwd.join("src-tauri")
+                .join("sounds")
+                .join(pack)
+                .join(filename),
             // Executable-relative (release builds)
             std::env::current_exe()
                 .unwrap_or_default()
@@ -175,7 +178,11 @@ impl SoundPlayer {
         let msg = format!(
             "Sound file '{}' not found. Searched:\n{}",
             filename,
-            candidates.iter().map(|p| format!("  - {}", p.display())).collect::<Vec<_>>().join("\n")
+            candidates
+                .iter()
+                .map(|p| format!("  - {}", p.display()))
+                .collect::<Vec<_>>()
+                .join("\n")
         );
         eprintln!("[SoundPlayer] {}", msg);
         Err(msg)
@@ -187,7 +194,7 @@ impl SoundPlayer {
         *cfg = config;
         Ok(())
     }
-    
+
     pub fn get_config(&self) -> Result<SoundConfig, String> {
         let cfg = self.config.lock().map_err(|e| e.to_string())?;
         Ok(cfg.clone())

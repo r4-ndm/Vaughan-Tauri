@@ -22,14 +22,13 @@
 ///! # Ok(())
 ///! # }
 ///! ```
-
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::Mutex;
 
-use crate::error::WalletError;
 use crate::dapp::logging::*;
+use crate::error::WalletError;
 
 /// Multi-tier rate limit configuration
 ///
@@ -98,15 +97,15 @@ struct MultiTierBucket {
     /// Per-second bucket
     second_tokens: f64,
     second_last_refill: Instant,
-    
+
     /// Per-minute bucket
     minute_tokens: f64,
     minute_last_refill: Instant,
-    
+
     /// Per-hour bucket
     hour_tokens: f64,
     hour_last_refill: Instant,
-    
+
     /// Configuration
     config: RateLimitConfig,
 }
@@ -129,19 +128,20 @@ impl MultiTierBucket {
     /// Refill all buckets based on elapsed time
     fn refill(&mut self) {
         let now = Instant::now();
-        
+
         // Refill per-second bucket
         let second_elapsed = now.duration_since(self.second_last_refill).as_secs_f64();
         self.second_tokens = (self.second_tokens + second_elapsed * self.config.per_second)
             .min(self.config.burst_size);
         self.second_last_refill = now;
-        
+
         // Refill per-minute bucket
         let minute_elapsed = now.duration_since(self.minute_last_refill).as_secs_f64();
-        self.minute_tokens = (self.minute_tokens + (minute_elapsed / 60.0) * self.config.per_minute)
+        self.minute_tokens = (self.minute_tokens
+            + (minute_elapsed / 60.0) * self.config.per_minute)
             .min(self.config.per_minute);
         self.minute_last_refill = now;
-        
+
         // Refill per-hour bucket
         let hour_elapsed = now.duration_since(self.hour_last_refill).as_secs_f64();
         self.hour_tokens = (self.hour_tokens + (hour_elapsed / 3600.0) * self.config.per_hour)
@@ -154,7 +154,7 @@ impl MultiTierBucket {
     /// Returns Ok if all buckets have tokens, Err with the limiting tier otherwise
     fn try_consume(&mut self) -> Result<(), &'static str> {
         self.refill();
-        
+
         // Check all tiers (most restrictive first)
         if self.second_tokens < 1.0 {
             return Err("per-second limit exceeded");
@@ -165,12 +165,12 @@ impl MultiTierBucket {
         if self.hour_tokens < 1.0 {
             return Err("per-hour limit exceeded");
         }
-        
+
         // Consume from all buckets
         self.second_tokens -= 1.0;
         self.minute_tokens -= 1.0;
         self.hour_tokens -= 1.0;
-        
+
         Ok(())
     }
 }
@@ -187,7 +187,7 @@ impl MethodRateLimits {
     /// Create new method rate limits with default configurations
     pub fn new() -> Self {
         let mut configs = HashMap::new();
-        
+
         // Sensitive methods - strict limits
         let sensitive_methods = vec![
             "eth_sendTransaction",
@@ -199,21 +199,18 @@ impl MethodRateLimits {
             "wallet_addEthereumChain",
             "wallet_switchEthereumChain",
         ];
-        
+
         for method in sensitive_methods {
             configs.insert(method.to_string(), RateLimitConfig::sensitive());
         }
-        
+
         // Connection methods - moderate limits
-        let connection_methods = vec![
-            "eth_requestAccounts",
-            "wallet_requestPermissions",
-        ];
-        
+        let connection_methods = vec!["eth_requestAccounts", "wallet_requestPermissions"];
+
         for method in connection_methods {
             configs.insert(method.to_string(), RateLimitConfig::connection());
         }
-        
+
         // Read-only methods - relaxed limits
         let read_only_methods = vec![
             "eth_call",
@@ -228,11 +225,11 @@ impl MethodRateLimits {
             "eth_getTransactionReceipt",
             "eth_getLogs",
         ];
-        
+
         for method in read_only_methods {
             configs.insert(method.to_string(), RateLimitConfig::read_only());
         }
-        
+
         Self {
             configs,
             default_config: RateLimitConfig::default(),
@@ -313,22 +310,22 @@ impl RateLimiter {
     /// ```
     pub async fn check_limit(&self, origin: &str, method: &str) -> Result<(), WalletError> {
         let mut buckets = self.buckets.lock().await;
-        
+
         // Create bucket key (origin:method)
         let key = format!("{}:{}", origin, method);
-        
+
         // Get or create bucket for this origin+method
         let config = self.method_limits.get_config(method);
         let bucket = buckets
             .entry(key)
             .or_insert_with(|| MultiTierBucket::new(config));
-        
+
         // Try to consume token
         bucket.try_consume().map_err(|tier| {
             log_rate_limit_exceeded(origin, method, tier);
             WalletError::RateLimitExceeded
         })?;
-        
+
         log_rate_limit_passed(origin, method);
         Ok(())
     }
@@ -374,7 +371,8 @@ mod tests {
         for i in 0..50 {
             assert!(
                 limiter.check_limit(origin, method).await.is_ok(),
-                "Request {} should succeed (burst)", i + 1
+                "Request {} should succeed (burst)",
+                i + 1
             );
         }
 
@@ -416,13 +414,13 @@ mod tests {
         // Burst should work (2 requests)
         assert!(limiter.check_limit(origin, method).await.is_ok());
         assert!(limiter.check_limit(origin, method).await.is_ok());
-        
+
         // Should fail (burst exhausted)
         assert!(limiter.check_limit(origin, method).await.is_err());
-        
+
         // Clear and test sustained rate
         limiter.clear(origin, method).await;
-        
+
         // Make 10 requests with 1.2s spacing (should all succeed - within minute limit)
         for i in 0..10 {
             if i > 0 {
@@ -430,7 +428,8 @@ mod tests {
             }
             assert!(
                 limiter.check_limit(origin, method).await.is_ok(),
-                "Request {} should succeed (within minute limit)", i + 1
+                "Request {} should succeed (within minute limit)",
+                i + 1
             );
         }
     }
@@ -507,7 +506,8 @@ mod tests {
         for i in 0..10 {
             assert!(
                 limiter.check_limit(origin, method).await.is_ok(),
-                "Request {} should succeed", i + 1
+                "Request {} should succeed",
+                i + 1
             );
         }
 
@@ -525,7 +525,8 @@ mod tests {
         for i in 0..20 {
             assert!(
                 limiter.check_limit(origin, method).await.is_ok(),
-                "Request {} should succeed", i + 1
+                "Request {} should succeed",
+                i + 1
             );
         }
 
@@ -560,7 +561,7 @@ mod tests {
     #[tokio::test]
     async fn test_custom_method_limits() {
         let mut method_limits = MethodRateLimits::new();
-        
+
         // Add custom limit for a method
         method_limits.set_config(
             "custom_method".to_string(),
@@ -579,7 +580,8 @@ mod tests {
         for i in 0..10 {
             assert!(
                 limiter.check_limit(origin, "custom_method").await.is_ok(),
-                "Request {} should succeed", i + 1
+                "Request {} should succeed",
+                i + 1
             );
         }
 
@@ -624,9 +626,10 @@ mod tests {
             assert!(limiter.check_limit(origin, method).await.is_ok());
             assert!(
                 limiter.check_limit(origin, method).await.is_err(),
-                "{} should have strict limits", method
+                "{} should have strict limits",
+                method
             );
-            
+
             // Clear for next test
             limiter.clear(origin, method).await;
         }

@@ -54,9 +54,9 @@ use crate::models::token::TrackedToken;
 use crate::chains::evm::EvmAdapter;
 use crate::chains::NetworkId;
 use crate::core::persistence::StateManager;
+use crate::core::{NetworkService, PriceService, TransactionService, WalletService};
 use crate::dapp::{ApprovalQueue, RateLimiter, SessionManager, WindowRegistry};
 use crate::error::WalletError;
-use crate::core::{NetworkService, PriceService, TransactionService, WalletService};
 use alloy::primitives::Address;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -120,7 +120,10 @@ impl VaughanState {
         info!("[VaughanState] Initializing...");
         let state_manager = StateManager::new()?;
         let persisted = state_manager.load();
-        debug!("[VaughanState] State loaded (version: {})", persisted.version);
+        debug!(
+            "[VaughanState] State loaded (version: {})",
+            persisted.version
+        );
 
         // Restore active account from persisted state
         let active_account = persisted
@@ -175,7 +178,10 @@ impl VaughanState {
             .unwrap_or_else(|| "https://rpc.v4.testnet.pulsechain.com".to_string());
         let chain_id = persisted.active_network_chain_id.unwrap_or(943);
 
-        info!("[VaughanState] Switching to initial network: {}", network_id);
+        info!(
+            "[VaughanState] Switching to initial network: {}",
+            network_id
+        );
         state
             .switch_network(&network_id, &rpc_url, chain_id)
             .await?;
@@ -249,11 +255,9 @@ impl VaughanState {
     }
 
     pub async fn set_active_chain(&self, chain_id: u64) -> Result<(), WalletError> {
-        let config = crate::chains::evm::networks::get_network_by_chain_id(chain_id)
-            .ok_or(WalletError::UnsupportedNetwork(format!(
-                "Chain ID {} not supported",
-                chain_id
-            )))?;
+        let config = crate::chains::evm::networks::get_network_by_chain_id(chain_id).ok_or(
+            WalletError::UnsupportedNetwork(format!("Chain ID {} not supported", chain_id)),
+        )?;
         self.switch_network(&config.id, &config.rpc_url, config.chain_id)
             .await
     }
@@ -423,12 +427,18 @@ impl VaughanState {
         state.active_network_rpc = rpc_url;
         state.active_network_chain_id = chain_id;
         state.active_account = active_account.map(|addr| format!("{:?}", addr));
-        
+
         // Flatten tracked tokens map to vector
-        state.tracked_tokens = tracked_tokens_map.values().flat_map(|v| v.clone()).collect::<Vec<TrackedToken>>();
+        state.tracked_tokens = tracked_tokens_map
+            .values()
+            .flat_map(|v| v.clone())
+            .collect::<Vec<TrackedToken>>();
 
         let result = self.state_manager.save(&state);
-        debug!("[VaughanState] save_state complete (success: {})", result.is_ok());
+        debug!(
+            "[VaughanState] save_state complete (success: {})",
+            result.is_ok()
+        );
         result
     }
 
@@ -498,7 +508,10 @@ mod tests {
         // Cleanup
         if let Ok(accounts) = state.wallet_service.get_accounts().await {
             for account in accounts {
-                let _ = state.wallet_service.keyring.delete_key(&format!("account_{}", account.address));
+                let _ = state
+                    .wallet_service
+                    .keyring
+                    .delete_key(&format!("account_{}", account.address));
             }
         }
         let _ = state.wallet_service.keyring.delete_key("seed");
@@ -518,6 +531,4 @@ mod tests {
         // Should return the account
         assert_eq!(state.active_account().await.unwrap(), addr);
     }
-
-
 }

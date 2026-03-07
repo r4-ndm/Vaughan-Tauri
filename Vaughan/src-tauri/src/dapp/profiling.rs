@@ -27,10 +27,10 @@
 //! # }
 //! ```
 
+use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use serde::Serialize;
 
 /// Request timing data
 #[derive(Debug, Clone)]
@@ -300,7 +300,9 @@ mod tests {
         profiler.record("eth_call".to_string(), 50).await;
         profiler.record("eth_call".to_string(), 100).await;
         profiler.record("eth_call".to_string(), 75).await;
-        profiler.record("eth_sendTransaction".to_string(), 200).await;
+        profiler
+            .record("eth_sendTransaction".to_string(), 200)
+            .await;
 
         let stats = profiler.get_stats().await;
 
@@ -401,9 +403,7 @@ mod tests {
             let profiler_clone = Arc::clone(&profiler);
             let handle = tokio::spawn(async move {
                 for j in 0..100 {
-                    profiler_clone
-                        .record(format!("method_{}", i), j)
-                        .await;
+                    profiler_clone.record(format!("method_{}", i), j).await;
                 }
             });
             handles.push(handle);

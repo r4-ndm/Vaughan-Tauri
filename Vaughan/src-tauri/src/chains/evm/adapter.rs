@@ -128,7 +128,9 @@ impl EvmAdapter {
         let reqwest_client = reqwest::Client::builder()
             .use_rustls_tls()
             .build()
-            .map_err(|e| WalletError::NetworkError(format!("Failed to build HTTP client: {}", e)))?;
+            .map_err(|e| {
+                WalletError::NetworkError(format!("Failed to build HTTP client: {}", e))
+            })?;
 
         // Configure Alloy Provider
         let transport = alloy::transports::http::Http::with_client(reqwest_client, url);
@@ -220,7 +222,9 @@ impl EvmAdapter {
         let reqwest_client = reqwest::Client::builder()
             .use_rustls_tls()
             .build()
-            .map_err(|e| WalletError::NetworkError(format!("Failed to build HTTP client: {}", e)))?;
+            .map_err(|e| {
+                WalletError::NetworkError(format!("Failed to build HTTP client: {}", e))
+            })?;
 
         // Configure Alloy Provider
         let transport = alloy::transports::http::Http::with_client(reqwest_client, url);
@@ -310,9 +314,12 @@ impl EvmAdapter {
         let api_url = match &self.explorer_api_url {
             Some(url) => url.clone(),
             None => {
-                eprintln!("[EvmAdapter] No explorer API URL for chain {}", self.chain_id);
+                eprintln!(
+                    "[EvmAdapter] No explorer API URL for chain {}",
+                    self.chain_id
+                );
                 return Ok(vec![]);
-            }
+            },
         };
 
         let url = format!(
@@ -333,7 +340,9 @@ impl EvmAdapter {
             .header("Accept", "application/json")
             .send()
             .await
-            .map_err(|e| WalletError::NetworkError(format!("Explorer API request failed: {}", e)))?;
+            .map_err(|e| {
+                WalletError::NetworkError(format!("Explorer API request failed: {}", e))
+            })?;
 
         let json: serde_json::Value = resp
             .json()
@@ -344,7 +353,10 @@ impl EvmAdapter {
         // or { status: "0", result: "No transactions found" } when empty
         let status = json.get("status").and_then(|s| s.as_str()).unwrap_or("0");
         if status != "1" {
-            eprintln!("[EvmAdapter] Explorer API returned status 0 (no txns or error): {:?}", json.get("message"));
+            eprintln!(
+                "[EvmAdapter] Explorer API returned status 0 (no txns or error): {:?}",
+                json.get("message")
+            );
             return Ok(vec![]);
         }
 
@@ -354,7 +366,10 @@ impl EvmAdapter {
             .cloned()
             .unwrap_or_default();
 
-        eprintln!("[EvmAdapter] Got {} transactions from explorer API", txns.len());
+        eprintln!(
+            "[EvmAdapter] Got {} transactions from explorer API",
+            txns.len()
+        );
         Ok(txns)
     }
 
@@ -397,14 +412,16 @@ impl EvmAdapter {
             .await
             .map_err(|e| WalletError::NetworkError(format!("Explorer token API failed: {}", e)))?;
 
-        let json: serde_json::Value = resp
-            .json()
-            .await
-            .map_err(|e| WalletError::NetworkError(format!("Explorer token API parse error: {}", e)))?;
+        let json: serde_json::Value = resp.json().await.map_err(|e| {
+            WalletError::NetworkError(format!("Explorer token API parse error: {}", e))
+        })?;
 
         let status = json.get("status").and_then(|s| s.as_str()).unwrap_or("0");
         if status != "1" {
-            eprintln!("[EvmAdapter] Token tx API returned status 0: {:?}", json.get("message"));
+            eprintln!(
+                "[EvmAdapter] Token tx API returned status 0: {:?}",
+                json.get("message")
+            );
             return Ok(vec![]);
         }
 
@@ -414,7 +431,10 @@ impl EvmAdapter {
             .cloned()
             .unwrap_or_default();
 
-        eprintln!("[EvmAdapter] Got {} token transfers from explorer API", txns.len());
+        eprintln!(
+            "[EvmAdapter] Got {} token transfers from explorer API",
+            txns.len()
+        );
         Ok(txns)
     }
 }
@@ -466,16 +486,22 @@ impl ChainAdapter for EvmAdapter {
         };
 
         // Check if signer exists (clone needed — ProviderBuilder::wallet takes ownership)
-        let signer = self.signer.as_ref().ok_or_else(|| {
-            WalletError::SignerNotAvailable(
-                "Cannot send transaction: adapter has no signer (use new_with_signer)".to_string(),
-            )
-        })?.clone();
+        let signer = self
+            .signer
+            .as_ref()
+            .ok_or_else(|| {
+                WalletError::SignerNotAvailable(
+                    "Cannot send transaction: adapter has no signer (use new_with_signer)"
+                        .to_string(),
+                )
+            })?
+            .clone();
 
         // Parse recipient address
-        let to_addr: AlloyAddress = evm_tx.to.parse().map_err(|e| {
-            WalletError::InvalidAddress(format!("Invalid 'to' address: {}", e))
-        })?;
+        let to_addr: AlloyAddress = evm_tx
+            .to
+            .parse()
+            .map_err(|e| WalletError::InvalidAddress(format!("Invalid 'to' address: {}", e)))?;
 
         // Parse value (wei)
         let value = U256::from_str_radix(&evm_tx.value, 10).unwrap_or_else(|_| {
@@ -532,16 +558,19 @@ impl ChainAdapter for EvmAdapter {
         let rpc_url = self.rpc_url.parse().map_err(|e| {
             WalletError::NetworkError(format!("Invalid RPC URL for signing provider: {}", e))
         })?;
-        
+
         // Create custom rustls client to bypass Windows Schannel NO_REVOCATION bugs
         let reqwest_client_sign = reqwest::Client::builder()
             .use_rustls_tls()
             .build()
-            .map_err(|e| WalletError::NetworkError(format!("Failed to build HTTP client for signing: {}", e)))?;
-            
-        let signing_transport = alloy::transports::http::Http::with_client(reqwest_client_sign, rpc_url);
+            .map_err(|e| {
+                WalletError::NetworkError(format!("Failed to build HTTP client for signing: {}", e))
+            })?;
+
+        let signing_transport =
+            alloy::transports::http::Http::with_client(reqwest_client_sign, rpc_url);
         let signing_rpc_client = alloy::rpc::client::RpcClient::new(signing_transport, true);
-        
+
         let signing_provider = ProviderBuilder::new()
             .wallet(wallet)
             .on_client(signing_rpc_client);

@@ -4,7 +4,6 @@
 ///!
 ///! **PHASE 3.4**: Critical for preventing origin spoofing and tracking
 ///! window navigation events.
-
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -16,13 +15,13 @@ use tokio::sync::RwLock;
 pub struct WindowInfo {
     /// Window label (unique identifier)
     pub window_label: String,
-    
+
     /// Current origin being displayed
     pub current_origin: String,
-    
+
     /// When the window was created
     pub created_at: SystemTime,
-    
+
     /// Last navigation timestamp
     pub last_navigation: SystemTime,
 }
@@ -78,7 +77,10 @@ impl WindowRegistry {
         };
 
         windows.insert(window_label.to_string(), info);
-        eprintln!("[WindowRegistry] Registered window: {} -> {}", window_label, origin);
+        eprintln!(
+            "[WindowRegistry] Registered window: {} -> {}",
+            window_label, origin
+        );
         Ok(())
     }
 
@@ -105,7 +107,7 @@ impl WindowRegistry {
                 info.current_origin = new_origin.to_string();
                 info.last_navigation = SystemTime::now();
                 Ok(())
-            }
+            },
             None => Err(format!("Window not found: {}", window_label)),
         }
     }
@@ -122,7 +124,9 @@ impl WindowRegistry {
     /// * `None` - Window not found
     pub async fn get_origin(&self, window_label: &str) -> Option<String> {
         let windows = self.windows.read().await;
-        windows.get(window_label).map(|info| info.current_origin.clone())
+        windows
+            .get(window_label)
+            .map(|info| info.current_origin.clone())
     }
 
     /// Get window info
@@ -230,7 +234,10 @@ mod tests {
         let origin = "https://app.uniswap.org";
 
         // Register window
-        registry.register_window(window_label, origin).await.unwrap();
+        registry
+            .register_window(window_label, origin)
+            .await
+            .unwrap();
 
         // Get origin
         let retrieved_origin = registry.get_origin(window_label).await.unwrap();
@@ -249,7 +256,10 @@ mod tests {
         let origin = "https://app.uniswap.org";
 
         // Register window
-        registry.register_window(window_label, origin).await.unwrap();
+        registry
+            .register_window(window_label, origin)
+            .await
+            .unwrap();
 
         // Try to register again (should fail)
         let result = registry.register_window(window_label, origin).await;
@@ -264,7 +274,10 @@ mod tests {
         let origin2 = "https://app.aave.com";
 
         // Register window
-        registry.register_window(window_label, origin1).await.unwrap();
+        registry
+            .register_window(window_label, origin1)
+            .await
+            .unwrap();
 
         // Update origin
         registry.update_origin(window_label, origin2).await.unwrap();
@@ -292,7 +305,10 @@ mod tests {
         let origin = "https://app.uniswap.org";
 
         // Register window
-        registry.register_window(window_label, origin).await.unwrap();
+        registry
+            .register_window(window_label, origin)
+            .await
+            .unwrap();
 
         // Verify exists
         assert!(registry.window_exists(window_label).await);
@@ -310,9 +326,18 @@ mod tests {
         let registry = WindowRegistry::new();
 
         // Register multiple windows
-        registry.register_window("window-1", "https://app.uniswap.org").await.unwrap();
-        registry.register_window("window-2", "https://app.aave.com").await.unwrap();
-        registry.register_window("window-3", "https://app.1inch.io").await.unwrap();
+        registry
+            .register_window("window-1", "https://app.uniswap.org")
+            .await
+            .unwrap();
+        registry
+            .register_window("window-2", "https://app.aave.com")
+            .await
+            .unwrap();
+        registry
+            .register_window("window-3", "https://app.1inch.io")
+            .await
+            .unwrap();
 
         // Get all windows
         let windows = registry.get_all_windows().await;
@@ -333,10 +358,16 @@ mod tests {
         assert_eq!(registry.window_count().await, 0);
 
         // Register windows
-        registry.register_window("window-1", "https://app.uniswap.org").await.unwrap();
+        registry
+            .register_window("window-1", "https://app.uniswap.org")
+            .await
+            .unwrap();
         assert_eq!(registry.window_count().await, 1);
 
-        registry.register_window("window-2", "https://app.aave.com").await.unwrap();
+        registry
+            .register_window("window-2", "https://app.aave.com")
+            .await
+            .unwrap();
         assert_eq!(registry.window_count().await, 2);
 
         // Remove window
@@ -349,8 +380,14 @@ mod tests {
         let registry = WindowRegistry::new();
 
         // Register multiple windows
-        registry.register_window("window-1", "https://app.uniswap.org").await.unwrap();
-        registry.register_window("window-2", "https://app.aave.com").await.unwrap();
+        registry
+            .register_window("window-1", "https://app.uniswap.org")
+            .await
+            .unwrap();
+        registry
+            .register_window("window-2", "https://app.aave.com")
+            .await
+            .unwrap();
 
         // Verify count
         assert_eq!(registry.window_count().await, 2);
@@ -372,7 +409,10 @@ mod tests {
         assert!(!registry.window_exists(window_label).await);
 
         // Register window
-        registry.register_window(window_label, origin).await.unwrap();
+        registry
+            .register_window(window_label, origin)
+            .await
+            .unwrap();
 
         // Should exist now
         assert!(registry.window_exists(window_label).await);

@@ -3,7 +3,6 @@
 ///! Routes dApp requests to appropriate handlers
 ///!
 ///! **PHASE 3.4 UPDATE**: Now accepts window_label for proper approval routing
-
 use crate::error::WalletError;
 use crate::state::VaughanState;
 use alloy::primitives::{Address, U256};
@@ -56,20 +55,30 @@ pub async fn handle_request(
         "eth_getTransactionReceipt" => handle_get_transaction_receipt(state, params).await,
 
         // Write Operations (require approval)
-        "eth_sendTransaction" => handle_send_transaction(app, state, window_label, origin, params).await,
+        "eth_sendTransaction" => {
+            handle_send_transaction(app, state, window_label, origin, params).await
+        },
         "personal_sign" => handle_personal_sign(app, state, window_label, origin, params).await,
-        "eth_signTypedData_v4" => handle_sign_typed_data_v4(app, state, window_label, origin, params).await,
+        "eth_signTypedData_v4" => {
+            handle_sign_typed_data_v4(app, state, window_label, origin, params).await
+        },
 
         // Network Switching (require approval)
-        "wallet_switchEthereumChain" => handle_switch_chain(state, window_label, origin, params).await,
+        "wallet_switchEthereumChain" => {
+            handle_switch_chain(state, window_label, origin, params).await
+        },
         "wallet_addEthereumChain" => handle_add_chain(state, window_label, origin, params).await,
 
         // Asset Management (EIP-747)
         "wallet_watchAsset" => handle_watch_asset(app, state, window_label, origin, params).await,
 
         // Permission Management (EIP-2255) - Stub implementations
-        "wallet_requestPermissions" => handle_request_permissions(state, window_label, origin, params).await,
-        "wallet_revokePermissions" => handle_revoke_permissions(state, window_label, origin, params).await,
+        "wallet_requestPermissions" => {
+            handle_request_permissions(state, window_label, origin, params).await
+        },
+        "wallet_revokePermissions" => {
+            handle_revoke_permissions(state, window_label, origin, params).await
+        },
         "wallet_getPermissions" => handle_get_permissions(state, window_label, origin).await,
 
         // Unsupported
@@ -87,20 +96,30 @@ async fn handle_request_accounts(
     origin: &str,
 ) -> Result<Value, WalletError> {
     // Check if already connected for this window (including auto-approved)
-    if let Some(connection) = state.session_manager.get_session_by_window(window_label, origin).await {
-        eprintln!("[RPC] Found existing session for window: {}, auto_approved: {}", window_label, connection.auto_approved);
-        
+    if let Some(connection) = state
+        .session_manager
+        .get_session_by_window(window_label, origin)
+        .await
+    {
+        eprintln!(
+            "[RPC] Found existing session for window: {}, auto_approved: {}",
+            window_label, connection.auto_approved
+        );
+
         // Return connected accounts immediately
         let accounts: Vec<String> = connection
             .accounts
             .iter()
             .map(|addr| format!("{:?}", addr))
             .collect();
-        
+
         if connection.auto_approved {
-            eprintln!("[RPC] Auto-approved session - returning accounts immediately: {:?}", accounts);
+            eprintln!(
+                "[RPC] Auto-approved session - returning accounts immediately: {:?}",
+                accounts
+            );
         }
-        
+
         return Ok(serde_json::json!(accounts));
     }
 
@@ -156,28 +175,40 @@ async fn handle_accounts(
     window_label: &str,
     origin: &str,
 ) -> Result<Value, WalletError> {
-    eprintln!("[RPC] eth_accounts - Looking for session with window_label: '{}', origin: '{}'", window_label, origin);
-    
+    eprintln!(
+        "[RPC] eth_accounts - Looking for session with window_label: '{}', origin: '{}'",
+        window_label, origin
+    );
+
     // Check if connected for this window
-    if let Some(connection) = state.session_manager.get_session_by_window(window_label, origin).await {
+    if let Some(connection) = state
+        .session_manager
+        .get_session_by_window(window_label, origin)
+        .await
+    {
         let accounts: Vec<String> = connection
             .accounts
             .iter()
             .map(|addr| format!("{:?}", addr))
             .collect();
-        
-        eprintln!("[RPC] eth_accounts - Found session for window: {}, auto_approved: {}, accounts: {:?}", 
-            window_label, connection.auto_approved, accounts);
-        
+
+        eprintln!(
+            "[RPC] eth_accounts - Found session for window: {}, auto_approved: {}, accounts: {:?}",
+            window_label, connection.auto_approved, accounts
+        );
+
         Ok(serde_json::json!(accounts))
     } else {
         // Not connected - return empty array
-        eprintln!("[RPC] eth_accounts - No session found for window: '{}', origin: '{}'", window_label, origin);
-        
+        eprintln!(
+            "[RPC] eth_accounts - No session found for window: '{}', origin: '{}'",
+            window_label, origin
+        );
+
         // Debug: List all sessions
         let all_sessions = state.session_manager.all_sessions().await;
         eprintln!("[RPC] eth_accounts - All sessions: {:?}", all_sessions);
-        
+
         Ok(serde_json::json!([]))
     }
 }
@@ -202,7 +233,10 @@ async fn handle_net_version(state: &VaughanState) -> Result<Value, WalletError> 
 // Read Operation Handlers (Passthrough to RPC)
 // ============================================================================
 
-async fn handle_get_balance(state: &VaughanState, params: Vec<Value>) -> Result<Value, WalletError> {
+async fn handle_get_balance(
+    state: &VaughanState,
+    params: Vec<Value>,
+) -> Result<Value, WalletError> {
     // Parse params
     let address_str = params
         .get(0)
@@ -211,7 +245,7 @@ async fn handle_get_balance(state: &VaughanState, params: Vec<Value>) -> Result<
 
     // Get balance using ChainAdapter trait
     let adapter = state.current_adapter().await?;
-    
+
     // Call trait method on Arc<EvmAdapter>
     use crate::chains::ChainAdapter;
     let balance = adapter.get_balance(address_str).await?;
@@ -273,7 +307,10 @@ async fn handle_call(state: &VaughanState, params: Vec<Value>) -> Result<Value, 
     Ok(serde_json::json!(format!("0x{}", hex::encode(&result))))
 }
 
-async fn handle_estimate_gas(state: &VaughanState, params: Vec<Value>) -> Result<Value, WalletError> {
+async fn handle_estimate_gas(
+    state: &VaughanState,
+    params: Vec<Value>,
+) -> Result<Value, WalletError> {
     // eth_estimateGas: [{ from, to, data, gas, value }]
     let tx_obj = match params.get(0) {
         Some(v) if v.is_object() => v.as_object().unwrap(),
@@ -331,7 +368,9 @@ async fn handle_get_transaction_count(
         .and_then(|v| v.as_str())
         .ok_or(WalletError::InvalidParams)?;
 
-    let address: Address = address.parse().map_err(|_| WalletError::InvalidAddress(address.to_string()))?;
+    let address: Address = address
+        .parse()
+        .map_err(|_| WalletError::InvalidAddress(address.to_string()))?;
 
     // Get nonce
     let adapter = state.current_adapter().await?;
@@ -390,35 +429,33 @@ async fn handle_send_transaction(
         .get("from")
         .and_then(|v| v.as_str())
         .ok_or(WalletError::InvalidParams)?;
-    
+
     let to = tx_obj
         .get("to")
         .and_then(|v| v.as_str())
         .ok_or(WalletError::InvalidParams)?;
-    
+
     let value = tx_obj
         .get("value")
         .and_then(|v| v.as_str())
         .unwrap_or("0x0");
-    
+
     let gas_limit = tx_obj
         .get("gas")
         .or_else(|| tx_obj.get("gasLimit"))
         .and_then(|v| v.as_str())
         .and_then(|s| u64::from_str_radix(s.trim_start_matches("0x"), 16).ok());
-    
-    let gas_price = tx_obj
-        .get("gasPrice")
-        .and_then(|v| v.as_str());
-    
-    let data = tx_obj
-        .get("data")
-        .and_then(|v| v.as_str());
+
+    let gas_price = tx_obj.get("gasPrice").and_then(|v| v.as_str());
+
+    let data = tx_obj.get("data").and_then(|v| v.as_str());
 
     // Validate addresses
-    let from_addr: Address = from.parse()
+    let from_addr: Address = from
+        .parse()
         .map_err(|_| WalletError::InvalidAddress(from.to_string()))?;
-    let to_addr: Address = to.parse()
+    let to_addr: Address = to
+        .parse()
         .map_err(|_| WalletError::InvalidAddress(to.to_string()))?;
 
     // Parse value (hex string to U256)
@@ -426,8 +463,7 @@ async fn handle_send_transaction(
         U256::from_str_radix(value.trim_start_matches("0x"), 16)
             .map_err(|_| WalletError::InvalidParams)?
     } else {
-        U256::from_str_radix(value, 10)
-            .map_err(|_| WalletError::InvalidParams)?
+        U256::from_str_radix(value, 10).map_err(|_| WalletError::InvalidParams)?
     };
 
     // Format value for display (in ETH)
@@ -440,8 +476,7 @@ async fn handle_send_transaction(
             U256::from_str_radix(price_hex.trim_start_matches("0x"), 16)
                 .map_err(|_| WalletError::InvalidParams)?
         } else {
-            U256::from_str_radix(price_hex, 10)
-                .map_err(|_| WalletError::InvalidParams)?
+            U256::from_str_radix(price_hex, 10).map_err(|_| WalletError::InvalidParams)?
         }
     } else {
         let price = adapter.get_gas_price().await?;
@@ -464,7 +499,10 @@ async fn handle_send_transaction(
     };
 
     // Add to approval queue and wait for response (with window_label)
-    let (id, rx) = state.approval_queue.add_request(window_label.to_string(), request_type).await?;
+    let (id, rx) = state
+        .approval_queue
+        .add_request(window_label.to_string(), request_type)
+        .await?;
 
     // Emit event to main window to trigger UI
     if let Some(main_window) = app.get_webview_window("main") {
@@ -481,8 +519,11 @@ async fn handle_send_transaction(
                 "gasPrice": gas_price_u256.to_string()
             }
         });
-        
-        eprintln!("[RPC] Emitting dapp_request event to main window: {:?}", payload);
+
+        eprintln!(
+            "[RPC] Emitting dapp_request event to main window: {:?}",
+            payload
+        );
         if let Err(e) = main_window.emit("dapp_request", payload) {
             eprintln!("[RPC] Failed to emit dapp_request event: {}", e);
         }
@@ -491,13 +532,10 @@ async fn handle_send_transaction(
     }
 
     // Wait for user response (with 5 minute timeout)
-    let response = tokio::time::timeout(
-        tokio::time::Duration::from_secs(300),
-        rx
-    )
-    .await
-    .map_err(|_| WalletError::Custom("Approval request timed out".to_string()))?
-    .map_err(|_| WalletError::Custom("Approval channel closed".to_string()))?;
+    let response = tokio::time::timeout(tokio::time::Duration::from_secs(300), rx)
+        .await
+        .map_err(|_| WalletError::Custom("Approval request timed out".to_string()))?
+        .map_err(|_| WalletError::Custom("Approval channel closed".to_string()))?;
 
     // Check if approved
     if !response.approved {
@@ -505,10 +543,13 @@ async fn handle_send_transaction(
     }
 
     // Get password from response data
-    let password = response.data
+    let password = response
+        .data
         .and_then(|d| d.get("password").cloned())
         .and_then(|p| p.as_str().map(|s| s.to_string()))
-        .ok_or(WalletError::Custom("Password required for transaction".to_string()))?;
+        .ok_or(WalletError::Custom(
+            "Password required for transaction".to_string(),
+        ))?;
 
     // Verify password and unlock wallet
     state.wallet_service.verify_password(&password).await?;
@@ -519,7 +560,7 @@ async fn handle_send_transaction(
     // Build transaction using Alloy
     use alloy::network::TransactionBuilder;
     use alloy::rpc::types::TransactionRequest;
-    
+
     let mut tx = TransactionRequest::default()
         .with_from(from_addr)
         .with_to(to_addr)
@@ -533,8 +574,7 @@ async fn handle_send_transaction(
             hex::decode(data_hex.trim_start_matches("0x"))
                 .map_err(|_| WalletError::InvalidParams)?
         } else {
-            hex::decode(data_hex)
-                .map_err(|_| WalletError::InvalidParams)?
+            hex::decode(data_hex).map_err(|_| WalletError::InvalidParams)?
         };
         tx = tx.with_input(data_bytes);
     }
@@ -544,20 +584,23 @@ async fn handle_send_transaction(
     tx = tx.with_nonce(nonce);
 
     // Send transaction using provider with signer
-    use alloy::providers::{Provider, ProviderBuilder};
     use alloy::network::EthereumWallet;
-    
+    use alloy::providers::{Provider, ProviderBuilder};
+
     let wallet = EthereumWallet::from(signer);
     let provider = ProviderBuilder::new()
         .with_recommended_fillers()
         .wallet(wallet)
-        .on_http(adapter.rpc_url().parse()
-            .map_err(|e| WalletError::NetworkError(format!("Invalid RPC URL: {}", e)))?);
+        .on_http(
+            adapter
+                .rpc_url()
+                .parse()
+                .map_err(|e| WalletError::NetworkError(format!("Invalid RPC URL: {}", e)))?,
+        );
 
-    let pending_tx = provider
-        .send_transaction(tx)
-        .await
-        .map_err(|e| WalletError::TransactionFailed(format!("Failed to send transaction: {}", e)))?;
+    let pending_tx = provider.send_transaction(tx).await.map_err(|e| {
+        WalletError::TransactionFailed(format!("Failed to send transaction: {}", e))
+    })?;
 
     let tx_hash = *pending_tx.tx_hash();
 
@@ -575,15 +618,17 @@ async fn handle_personal_sign(
     // personal_sign params: [message, address]
     // message is hex-encoded string to sign
     // address is the account to sign with
-    
+
     if params.len() < 2 {
-        return Err(WalletError::Custom("personal_sign requires 2 parameters".to_string()));
+        return Err(WalletError::Custom(
+            "personal_sign requires 2 parameters".to_string(),
+        ));
     }
 
     let message_hex = params[0]
         .as_str()
         .ok_or_else(|| WalletError::Custom("Message must be a string".to_string()))?;
-    
+
     let address_str = params[1]
         .as_str()
         .ok_or_else(|| WalletError::Custom("Address must be a string".to_string()))?;
@@ -602,7 +647,9 @@ async fn handle_personal_sign(
 
     // Verify address is in session
     if !session.accounts.contains(&address) {
-        return Err(WalletError::PermissionDenied("Address not authorized".to_string()));
+        return Err(WalletError::PermissionDenied(
+            "Address not authorized".to_string(),
+        ));
     }
 
     // Decode message from hex
@@ -643,8 +690,11 @@ async fn handle_personal_sign(
                 "message": message_text
             }
         });
-        
-        eprintln!("[RPC] Emitting dapp_request event to main window: {:?}", payload);
+
+        eprintln!(
+            "[RPC] Emitting dapp_request event to main window: {:?}",
+            payload
+        );
         if let Err(e) = main_window.emit("dapp_request", payload) {
             eprintln!("[RPC] Failed to emit dapp_request event: {}", e);
         }
@@ -665,7 +715,10 @@ async fn handle_personal_sign(
     // Get password from response data
     let password = response
         .data
-        .and_then(|data| data.get("password").and_then(|p| p.as_str().map(String::from)))
+        .and_then(|data| {
+            data.get("password")
+                .and_then(|p| p.as_str().map(String::from))
+        })
         .ok_or_else(|| WalletError::Custom("Password required for signing".to_string()))?;
 
     // Sign the message using wallet service
@@ -687,7 +740,9 @@ async fn handle_sign_typed_data_v4(
 ) -> Result<Value, WalletError> {
     // eth_signTypedData_v4 params: [address, typedDataJson]
     if params.len() < 2 {
-        return Err(WalletError::Custom("eth_signTypedData_v4 requires 2 parameters".to_string()));
+        return Err(WalletError::Custom(
+            "eth_signTypedData_v4 requires 2 parameters".to_string(),
+        ));
     }
 
     let address_str = params[0]
@@ -714,7 +769,9 @@ async fn handle_sign_typed_data_v4(
         .map_err(|_| WalletError::InvalidAddress(address_str.to_string()))?;
 
     if !session.accounts.contains(&address) {
-        return Err(WalletError::PermissionDenied("Address not in session".to_string()));
+        return Err(WalletError::PermissionDenied(
+            "Address not in session".to_string(),
+        ));
     }
 
     // Create approval request
@@ -785,35 +842,37 @@ async fn handle_switch_chain(
         .get(0)
         .and_then(|v| v.as_object())
         .ok_or(WalletError::InvalidParams)?;
-    
+
     let chain_id_hex = params_obj
         .get("chainId")
         .and_then(|v| v.as_str())
         .ok_or(WalletError::InvalidParams)?;
-    
+
     // Parse chain ID
     let chain_id = if chain_id_hex.starts_with("0x") {
         u64::from_str_radix(chain_id_hex.trim_start_matches("0x"), 16)
             .map_err(|_| WalletError::InvalidParams)?
     } else {
-        u64::from_str_radix(chain_id_hex, 10)
-            .map_err(|_| WalletError::InvalidParams)?
+        u64::from_str_radix(chain_id_hex, 10).map_err(|_| WalletError::InvalidParams)?
     };
 
-    eprintln!("[RPC] wallet_switchEthereumChain: Requesting switch to chain {}", chain_id);
+    eprintln!(
+        "[RPC] wallet_switchEthereumChain: Requesting switch to chain {}",
+        chain_id
+    );
 
     // Verify chain is supported
     // For now, allow switching to any configured chain
     // In future, this should prompt user approval if not auto-approved
-    
+
     // Check if chain is supported/configured
     // This is done implicitly by set_active_chain returning error if not found
-    
+
     // Switch chain
     state.set_active_chain(chain_id).await?;
-    
+
     eprintln!("[RPC] Successfully switched to chain {}", chain_id);
-    
+
     // Return null as per EIP-3326
     Ok(serde_json::json!(null))
 }
@@ -839,8 +898,7 @@ async fn handle_add_chain(
         u64::from_str_radix(chain_id_hex.trim_start_matches("0x"), 16)
             .map_err(|_| WalletError::InvalidParams)?
     } else {
-        u64::from_str_radix(chain_id_hex, 10)
-            .map_err(|_| WalletError::InvalidParams)?
+        u64::from_str_radix(chain_id_hex, 10).map_err(|_| WalletError::InvalidParams)?
     };
 
     let rpc_url = chain_obj
@@ -848,7 +906,9 @@ async fn handle_add_chain(
         .and_then(|v| v.as_array())
         .and_then(|arr| arr.first())
         .and_then(|v| v.as_str())
-        .ok_or_else(|| WalletError::Custom("wallet_addEthereumChain: no rpcUrls provided".to_string()))?;
+        .ok_or_else(|| {
+            WalletError::Custom("wallet_addEthereumChain: no rpcUrls provided".to_string())
+        })?;
 
     let network_name = chain_obj
         .get("chainName")
@@ -856,12 +916,20 @@ async fn handle_add_chain(
         .unwrap_or("Custom Network")
         .to_string();
 
-    eprintln!("[RPC] wallet_addEthereumChain: Adding chain {} ({})", network_name, chain_id);
+    eprintln!(
+        "[RPC] wallet_addEthereumChain: Adding chain {} ({})",
+        network_name, chain_id
+    );
 
     // Switch to this network (creates adapter on-demand)
-    state.switch_network(&format!("custom-{}", chain_id), rpc_url, chain_id).await?;
+    state
+        .switch_network(&format!("custom-{}", chain_id), rpc_url, chain_id)
+        .await?;
 
-    eprintln!("[RPC] wallet_addEthereumChain: Successfully added chain {}", chain_id);
+    eprintln!(
+        "[RPC] wallet_addEthereumChain: Successfully added chain {}",
+        chain_id
+    );
 
     // Return null as per EIP-3085
     Ok(serde_json::json!(null))
@@ -872,7 +940,7 @@ async fn handle_add_chain(
 // ============================================================================
 
 /// Handle wallet_requestPermissions
-/// 
+///
 /// Stub implementation - returns success to unblock dApps
 /// Full implementation in Phase 4
 async fn handle_request_permissions(
@@ -886,7 +954,7 @@ async fn handle_request_permissions(
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_millis() as i64;
-    
+
     Ok(serde_json::json!([
         {
             "parentCapability": "eth_accounts",
@@ -896,7 +964,7 @@ async fn handle_request_permissions(
 }
 
 /// Handle wallet_revokePermissions
-/// 
+///
 /// Stub implementation - returns null to indicate success
 /// Full implementation in Phase 4
 async fn handle_revoke_permissions(
@@ -910,7 +978,7 @@ async fn handle_revoke_permissions(
 }
 
 /// Handle wallet_getPermissions
-/// 
+///
 /// Stub implementation - returns current permissions
 /// Full implementation in Phase 4
 async fn handle_get_permissions(
@@ -919,13 +987,18 @@ async fn handle_get_permissions(
     origin: &str,
 ) -> Result<Value, WalletError> {
     // Check if session exists
-    if state.session_manager.get_session_by_window(window_label, origin).await.is_some() {
+    if state
+        .session_manager
+        .get_session_by_window(window_label, origin)
+        .await
+        .is_some()
+    {
         // Return eth_accounts permission
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_millis() as i64;
-        
+
         Ok(serde_json::json!([
             {
                 "parentCapability": "eth_accounts",
@@ -943,12 +1016,12 @@ async fn handle_get_permissions(
 // ============================================================================
 
 /// Handle wallet_watchAsset (EIP-747)
-/// 
+///
 /// Allows dApps to suggest tokens for users to add to their wallet.
 /// This is the "Add to MetaMask" button functionality.
-/// 
+///
 /// # Parameters
-/// 
+///
 /// Expected params format:
 /// ```json
 /// {
@@ -969,36 +1042,45 @@ async fn handle_watch_asset(
     params: Vec<Value>,
 ) -> Result<Value, WalletError> {
     // Parse parameters (EIP-747 format)
-    let asset_params = params.get(0)
+    let asset_params = params
+        .get(0)
         .ok_or_else(|| WalletError::Custom("Missing asset parameters".to_string()))?;
-    
-    let asset_type = asset_params.get("type")
+
+    let asset_type = asset_params
+        .get("type")
         .and_then(|v: &Value| v.as_str())
         .ok_or_else(|| WalletError::Custom("Missing asset type".to_string()))?;
-    
+
     // Only support ERC20 for now
     if asset_type != "ERC20" {
-        return Err(WalletError::Custom(format!("Unsupported asset type: {}", asset_type)));
+        return Err(WalletError::Custom(format!(
+            "Unsupported asset type: {}",
+            asset_type
+        )));
     }
-    
-    let options = asset_params.get("options")
+
+    let options = asset_params
+        .get("options")
         .ok_or_else(|| WalletError::Custom("Missing asset options".to_string()))?;
-    
-    let address = options.get("address")
+
+    let address = options
+        .get("address")
         .and_then(|v: &Value| v.as_str())
         .ok_or_else(|| WalletError::Custom("Missing token address".to_string()))?;
-    
-    let symbol = options.get("symbol")
+
+    let symbol = options
+        .get("symbol")
         .and_then(|v: &Value| v.as_str())
         .ok_or_else(|| WalletError::Custom("Missing token symbol".to_string()))?;
-    
-    let decimals = options.get("decimals")
+
+    let decimals = options
+        .get("decimals")
         .and_then(|v: &Value| v.as_u64())
-        .ok_or_else(|| WalletError::Custom("Missing token decimals".to_string()))? as u32;
-    
-    let image = options.get("image")
-        .and_then(|v: &Value| v.as_str());
-    
+        .ok_or_else(|| WalletError::Custom("Missing token decimals".to_string()))?
+        as u32;
+
+    let image = options.get("image").and_then(|v: &Value| v.as_str());
+
     eprintln!("[RPC] wallet_watchAsset request from {}:", origin);
     eprintln!("  Address: {}", address);
     eprintln!("  Symbol: {}", symbol);
@@ -1017,7 +1099,7 @@ async fn handle_watch_asset(
                 "image": image
             }
         });
-        
+
         eprintln!("[RPC] Emitting dapp_watch_asset event to main window");
         if let Err(e) = main_window.emit("dapp_watch_asset", payload) {
             eprintln!("[RPC] Failed to emit dapp_watch_asset event: {}", e);
@@ -1027,7 +1109,7 @@ async fn handle_watch_asset(
     // Add token to tracked list directly (low-risk operation)
     let adapter = state.current_adapter().await?;
     let chain_id = adapter.chain_id();
-    
+
     let token = crate::models::token::TrackedToken {
         address: address.to_string(),
         symbol: symbol.to_string(),
@@ -1040,7 +1122,10 @@ async fn handle_watch_asset(
     let chain_tokens = tracked_tokens.entry(chain_id).or_default();
 
     // Only add if not already tracked
-    if !chain_tokens.iter().any(|t| t.address.eq_ignore_ascii_case(&token.address)) {
+    if !chain_tokens
+        .iter()
+        .any(|t| t.address.eq_ignore_ascii_case(&token.address))
+    {
         chain_tokens.push(token);
         eprintln!("[RPC] Token {} ({}) added to tracked list", symbol, address);
     } else {

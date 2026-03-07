@@ -1,19 +1,18 @@
 /**
  * Approval Queue Module
- * 
+ *
  * Manages user approval requests for dApp operations
  * Implements queue with timeout and cancellation support
- * 
+ *
  * **PHASE 3.4 UPDATE**: Approvals are now window-specific to support
  * proper routing of approval responses to the correct dApp window.
  */
-
 use crate::error::WalletError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{Mutex, oneshot};
+use tokio::sync::{oneshot, Mutex};
 
 /// Approval request ID
 pub type ApprovalId = String;
@@ -23,9 +22,7 @@ pub type ApprovalId = String;
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum ApprovalRequestType {
     /// Connection request
-    Connection {
-        origin: String,
-    },
+    Connection { origin: String },
     /// Transaction request
     Transaction {
         origin: String,
@@ -58,10 +55,7 @@ pub enum ApprovalRequestType {
         image: Option<String>,
     },
     /// Network switch request
-    SwitchNetwork {
-        origin: String,
-        chain_id: u64,
-    },
+    SwitchNetwork { origin: String, chain_id: u64 },
     /// Add network request
     AddNetwork {
         origin: String,
@@ -141,9 +135,7 @@ impl ApprovalQueue {
 
         // Check queue size (max 10 pending)
         if pending.len() >= 10 {
-            return Err(WalletError::Custom(
-                "Approval queue is full".to_string(),
-            ));
+            return Err(WalletError::Custom("Approval queue is full".to_string()));
         }
 
         // Generate unique ID
@@ -220,7 +212,7 @@ impl ApprovalQueue {
                 // Send response (ignore if receiver dropped)
                 let _ = approval.response_tx.send(response);
                 Ok(())
-            }
+            },
             None => Err(WalletError::Custom(
                 "Approval request not found".to_string(),
             )),
@@ -249,7 +241,7 @@ impl ApprovalQueue {
                     data: None,
                 });
                 Ok(())
-            }
+            },
             None => Err(WalletError::Custom(
                 "Approval request not found".to_string(),
             )),
@@ -287,7 +279,7 @@ impl ApprovalQueue {
     /// Useful for cleanup/reset
     pub async fn clear_all(&self) {
         let mut pending = self.pending.lock().await;
-        
+
         // Send rejection to all pending requests
         for (id, approval) in pending.drain() {
             let _ = approval.response_tx.send(ApprovalResponse {
@@ -365,7 +357,10 @@ mod tests {
             origin: "https://app.pulsex.com".to_string(),
         };
 
-        let (id, _rx) = queue.add_request(window_label.clone(), request_type.clone()).await.unwrap();
+        let (id, _rx) = queue
+            .add_request(window_label.clone(), request_type.clone())
+            .await
+            .unwrap();
 
         let request = queue.get_request(&id).await.unwrap();
         assert_eq!(request.id, id);
@@ -433,7 +428,10 @@ mod tests {
             let request_type = ApprovalRequestType::Connection {
                 origin: "https://app.pulsex.com".to_string(),
             };
-            queue.add_request(window_label.clone(), request_type).await.unwrap();
+            queue
+                .add_request(window_label.clone(), request_type)
+                .await
+                .unwrap();
         }
 
         // 11th should fail
@@ -455,9 +453,18 @@ mod tests {
             origin: "https://app.pulsex.com".to_string(),
         };
 
-        let (id1, rx1) = queue.add_request(window1.clone(), request_type.clone()).await.unwrap();
-        let (id2, rx2) = queue.add_request(window1.clone(), request_type.clone()).await.unwrap();
-        let (id3, _rx3) = queue.add_request(window2.clone(), request_type.clone()).await.unwrap();
+        let (id1, rx1) = queue
+            .add_request(window1.clone(), request_type.clone())
+            .await
+            .unwrap();
+        let (id2, rx2) = queue
+            .add_request(window1.clone(), request_type.clone())
+            .await
+            .unwrap();
+        let (id3, _rx3) = queue
+            .add_request(window2.clone(), request_type.clone())
+            .await
+            .unwrap();
 
         // Should have 3 requests
         assert_eq!(queue.get_all_requests().await.len(), 3);
@@ -489,9 +496,18 @@ mod tests {
         };
 
         // Add requests for two windows
-        queue.add_request(window1.clone(), request_type.clone()).await.unwrap();
-        queue.add_request(window1.clone(), request_type.clone()).await.unwrap();
-        queue.add_request(window2.clone(), request_type.clone()).await.unwrap();
+        queue
+            .add_request(window1.clone(), request_type.clone())
+            .await
+            .unwrap();
+        queue
+            .add_request(window1.clone(), request_type.clone())
+            .await
+            .unwrap();
+        queue
+            .add_request(window2.clone(), request_type.clone())
+            .await
+            .unwrap();
 
         // Get requests for window 1
         let window1_requests = queue.get_requests_for_window(&window1).await;

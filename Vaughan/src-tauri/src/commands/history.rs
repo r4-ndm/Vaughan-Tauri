@@ -97,10 +97,9 @@ pub async fn get_transactions(
         .collect();
 
     // Remove duplicate 0-value native records that are just wrappers for token transactions
-    let token_hashes: std::collections::HashSet<String> = token_records.iter().map(|tx| tx.hash.clone()).collect();
-    records.retain(|tx| {
-        !token_hashes.contains(&tx.hash) || tx.value != "0"
-    });
+    let token_hashes: std::collections::HashSet<String> =
+        token_records.iter().map(|tx| tx.hash.clone()).collect();
+    records.retain(|tx| !token_hashes.contains(&tx.hash) || tx.value != "0");
 
     records.extend(token_records);
 
@@ -115,21 +114,60 @@ pub async fn get_transactions(
 fn parse_native_tx(tx: &serde_json::Value, native_symbol: &str) -> Option<TxRecord> {
     let hash = tx.get("hash")?.as_str()?.to_string();
     let from = tx.get("from")?.as_str()?.to_string();
-    let to = tx.get("to").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let to = tx
+        .get("to")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     let value_wei = tx.get("value").and_then(|v| v.as_str()).unwrap_or("0");
     let value_eth = wei_str_to_native(value_wei);
-    let gas_used = tx.get("gasUsed").and_then(|v| v.as_str()).unwrap_or("0").to_string();
-    let gas_price = tx.get("gasPrice").and_then(|v| v.as_str()).unwrap_or("0").to_string();
-    let block_number = tx.get("blockNumber").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()).unwrap_or(0);
-    let timestamp = tx.get("timeStamp").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()).unwrap_or(0);
+    let gas_used = tx
+        .get("gasUsed")
+        .and_then(|v| v.as_str())
+        .unwrap_or("0")
+        .to_string();
+    let gas_price = tx
+        .get("gasPrice")
+        .and_then(|v| v.as_str())
+        .unwrap_or("0")
+        .to_string();
+    let block_number = tx
+        .get("blockNumber")
+        .and_then(|v| v.as_str())
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+    let timestamp = tx
+        .get("timeStamp")
+        .and_then(|v| v.as_str())
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
     let is_error = tx.get("isError").and_then(|v| v.as_str()).unwrap_or("0");
-    let receipt_status = tx.get("txreceipt_status").and_then(|v| v.as_str()).unwrap_or("1");
-    let status = if is_error == "1" || receipt_status == "0" { 0 } else { 1 };
-    let input = tx.get("input").and_then(|v| v.as_str()).unwrap_or("0x").to_string();
+    let receipt_status = tx
+        .get("txreceipt_status")
+        .and_then(|v| v.as_str())
+        .unwrap_or("1");
+    let status = if is_error == "1" || receipt_status == "0" {
+        0
+    } else {
+        1
+    };
+    let input = tx
+        .get("input")
+        .and_then(|v| v.as_str())
+        .unwrap_or("0x")
+        .to_string();
 
     Some(TxRecord {
-        hash, from, to, value: value_eth, gas_used, gas_price,
-        block_number, timestamp, status, input,
+        hash,
+        from,
+        to,
+        value: value_eth,
+        gas_used,
+        gas_price,
+        block_number,
+        timestamp,
+        status,
+        input,
         native_symbol: native_symbol.to_string(),
         token_symbol: None,
         token_address: None,
@@ -141,29 +179,63 @@ fn parse_native_tx(tx: &serde_json::Value, native_symbol: &str) -> Option<TxReco
 fn parse_token_tx(tx: &serde_json::Value, native_symbol: &str) -> Option<TxRecord> {
     let hash = tx.get("hash")?.as_str()?.to_string();
     let from = tx.get("from")?.as_str()?.to_string();
-    let to = tx.get("to").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let to = tx
+        .get("to")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
 
     // ERC20 value is in token's smallest unit — divide by 10^decimals
     let value_raw = tx.get("value").and_then(|v| v.as_str()).unwrap_or("0");
-    let decimals: u32 = tx.get("tokenDecimal").and_then(|v| v.as_str())
-        .and_then(|s| s.parse().ok()).unwrap_or(18);
+    let decimals: u32 = tx
+        .get("tokenDecimal")
+        .and_then(|v| v.as_str())
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(18);
     let value = format_token_amount(value_raw, decimals);
 
-    let token_symbol = tx.get("tokenSymbol").and_then(|v| v.as_str())
-        .unwrap_or("TOKEN").to_string();
-    let token_address = tx.get("contractAddress").and_then(|v| v.as_str())
+    let token_symbol = tx
+        .get("tokenSymbol")
+        .and_then(|v| v.as_str())
+        .unwrap_or("TOKEN")
+        .to_string();
+    let token_address = tx
+        .get("contractAddress")
+        .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
-    let gas_used = tx.get("gasUsed").and_then(|v| v.as_str()).unwrap_or("0").to_string();
-    let gas_price = tx.get("gasPrice").and_then(|v| v.as_str()).unwrap_or("0").to_string();
-    let block_number = tx.get("blockNumber").and_then(|v| v.as_str())
-        .and_then(|s| s.parse().ok()).unwrap_or(0);
-    let timestamp = tx.get("timeStamp").and_then(|v| v.as_str())
-        .and_then(|s| s.parse().ok()).unwrap_or(0);
+    let gas_used = tx
+        .get("gasUsed")
+        .and_then(|v| v.as_str())
+        .unwrap_or("0")
+        .to_string();
+    let gas_price = tx
+        .get("gasPrice")
+        .and_then(|v| v.as_str())
+        .unwrap_or("0")
+        .to_string();
+    let block_number = tx
+        .get("blockNumber")
+        .and_then(|v| v.as_str())
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+    let timestamp = tx
+        .get("timeStamp")
+        .and_then(|v| v.as_str())
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
 
     Some(TxRecord {
-        hash, from, to, value, gas_used, gas_price,
-        block_number, timestamp, status: 1, input: "0x".to_string(),
+        hash,
+        from,
+        to,
+        value,
+        gas_used,
+        gas_price,
+        block_number,
+        timestamp,
+        status: 1,
+        input: "0x".to_string(),
         native_symbol: native_symbol.to_string(),
         token_symbol: Some(token_symbol),
         token_address,

@@ -213,7 +213,10 @@ impl fmt::Display for WalletError {
             Self::DappNotConnected(origin) => write!(f, "dApp not connected: {}", origin),
             Self::PermissionDenied(msg) => write!(f, "Permission denied: {}", msg),
             Self::InvalidOrigin(origin) => write!(f, "Invalid origin: {}", origin),
-            Self::OriginMismatch => write!(f, "Origin mismatch: session origin doesn't match request origin"),
+            Self::OriginMismatch => write!(
+                f,
+                "Origin mismatch: session origin doesn't match request origin"
+            ),
             Self::NotConnected => write!(f, "Not connected: no active session"),
             Self::RateLimitExceeded => write!(f, "Rate limit exceeded: too many requests"),
             Self::UnsupportedMethod(method) => write!(f, "Unsupported method: {}", method),
@@ -294,24 +297,14 @@ impl WalletError {
             Self::OriginMismatch => {
                 "Origin mismatch. The request origin doesn't match the session.".to_string()
             },
-            Self::NotConnected => {
-                "Not connected. Please connect to the dApp first.".to_string()
-            },
+            Self::NotConnected => "Not connected. Please connect to the dApp first.".to_string(),
             Self::UnsupportedMethod(method) => {
                 format!("Method '{}' is not supported.", method)
             },
-            Self::InvalidParams => {
-                "Invalid parameters provided.".to_string()
-            },
-            Self::DuplicateRequest => {
-                "Duplicate request detected.".to_string()
-            },
-            Self::RequestExpired => {
-                "Request has expired. Please try again.".to_string()
-            },
-            Self::UserRejected => {
-                "User rejected the request.".to_string()
-            },
+            Self::InvalidParams => "Invalid parameters provided.".to_string(),
+            Self::DuplicateRequest => "Duplicate request detected.".to_string(),
+            Self::RequestExpired => "Request has expired. Please try again.".to_string(),
+            Self::UserRejected => "User rejected the request.".to_string(),
             Self::PermissionDenied(msg) => {
                 format!("Permission denied: {}", msg)
             },

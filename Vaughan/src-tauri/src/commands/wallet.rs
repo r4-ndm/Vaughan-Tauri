@@ -74,7 +74,10 @@ pub async fn create_wallet(
     }
 
     // Create wallet
-    state.wallet_service.create_wallet(&password, word_count).await
+    state
+        .wallet_service
+        .create_wallet(&password, word_count)
+        .await
 }
 
 /// Import wallet from BIP-39 mnemonic
@@ -114,7 +117,9 @@ pub async fn import_wallet(
     }
 
     if mnemonic.trim().is_empty() {
-        return Err(WalletError::InvalidMnemonic("Mnemonic is empty".to_string()));
+        return Err(WalletError::InvalidMnemonic(
+            "Mnemonic is empty".to_string(),
+        ));
     }
 
     if account_count == 0 || account_count > 10 {
@@ -316,7 +321,9 @@ pub async fn import_account(
     }
 
     if name.trim().is_empty() {
-        return Err(WalletError::InternalError("Account name is empty".to_string()));
+        return Err(WalletError::InternalError(
+            "Account name is empty".to_string(),
+        ));
     }
 
     // Remove 0x prefix if present
@@ -403,7 +410,7 @@ pub async fn rename_account(
     if password.is_empty() {
         return Err(WalletError::InvalidPassword);
     }
-    
+
     let parsed_address = address
         .parse()
         .map_err(|_| WalletError::InvalidAddress(address.clone()))?;
@@ -436,7 +443,7 @@ pub async fn export_private_key(
     if password.is_empty() {
         return Err(WalletError::InvalidPassword);
     }
-    
+
     let parsed_address = address
         .parse()
         .map_err(|_| WalletError::InvalidAddress(address.clone()))?;
@@ -491,9 +498,9 @@ pub async fn set_active_account(
     address: String,
 ) -> Result<(), WalletError> {
     use alloy::primitives::Address;
-    
+
     eprintln!("[Wallet] Setting active account: {}", address);
-    
+
     // Parse and validate address
     let address: Address = address
         .parse()
@@ -507,34 +514,41 @@ pub async fn set_active_account(
 
     // Set as active
     state.set_active_account(address).await;
-    
+
     eprintln!("[Wallet] Active account set: {}", address);
 
     // ========================================================================
     // Update DApp sessions (Security Fix!)
     // ========================================================================
     // Update actual permissions for all active sessions before emitting the event.
-    // Otherwise, dApps will know the new account but still be authorized 
+    // Otherwise, dApps will know the new account but still be authorized
     // for the old one leading to mismatched RPC handling.
-    state.session_manager.update_all_sessions_accounts(vec![address]).await;
+    state
+        .session_manager
+        .update_all_sessions_accounts(vec![address])
+        .await;
 
     // ========================================================================
     // Emit accountsChanged event to all dApp windows (Phase 3.4 - Task 4.1)
     // ========================================================================
-    
+
     // Collect window labels first (avoid holding lock during emit)
-    let window_labels: Vec<String> = {
-        state.window_registry.get_all_labels().await
-    }; // Lock released here
-    
-    eprintln!("[Wallet] Emitting accountsChanged to {} windows", window_labels.len());
-    
+    let window_labels: Vec<String> = { state.window_registry.get_all_labels().await }; // Lock released here
+
+    eprintln!(
+        "[Wallet] Emitting accountsChanged to {} windows",
+        window_labels.len()
+    );
+
     // Emit to all dApp windows (without holding lock)
     let address_str = format!("0x{:x}", address);
     for window_label in window_labels {
         if let Some(window) = app.get_webview_window(&window_label) {
             match window.emit("accountsChanged", vec![address_str.clone()]) {
-                Ok(_) => eprintln!("[Wallet] Emitted accountsChanged to window: {}", window_label),
+                Ok(_) => eprintln!(
+                    "[Wallet] Emitted accountsChanged to window: {}",
+                    window_label
+                ),
                 Err(e) => eprintln!("[Wallet] Failed to emit to window {}: {}", window_label, e),
             }
         } else {

@@ -4,7 +4,6 @@
 ///!
 ///! **PHASE 3.4 UPDATE**: Sessions are now window-specific to support
 ///! multiple windows connecting to the same origin independently.
-
 use crate::error::WalletError;
 use alloy::primitives::Address;
 use serde::{Deserialize, Serialize};
@@ -85,7 +84,10 @@ impl SessionManager {
     ) -> Result<(), WalletError> {
         let mut sessions = self.sessions.write().await;
 
-        eprintln!("[SessionManager] Creating session for window: {}, origin: {}", window_label, origin);
+        eprintln!(
+            "[SessionManager] Creating session for window: {}, origin: {}",
+            window_label, origin
+        );
 
         let connection = DappConnection {
             window_label: window_label.to_string(),
@@ -106,7 +108,10 @@ impl SessionManager {
 
         let key = (window_label.to_string(), origin.to_string());
         sessions.insert(key, connection);
-        eprintln!("[SessionManager] Session created. Total sessions: {}", sessions.len());
+        eprintln!(
+            "[SessionManager] Session created. Total sessions: {}",
+            sessions.len()
+        );
         Ok(())
     }
 
@@ -162,7 +167,7 @@ impl SessionManager {
                     return Err(WalletError::Custom("Window label mismatch".to_string()));
                 }
                 Ok(())
-            }
+            },
             None => Err(WalletError::NotConnected),
         }
     }
@@ -187,11 +192,11 @@ impl SessionManager {
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
                     .as_secs();
-                
+
                 // Ensure timestamp always increases (handle sub-second updates)
                 session.last_activity = new_activity.max(session.last_activity + 1);
                 Ok(())
-            }
+            },
             None => Err(WalletError::NotConnected),
         }
     }
@@ -218,7 +223,10 @@ impl SessionManager {
     pub async fn remove_all_sessions_for_window(&self, window_label: &str) {
         let mut sessions = self.sessions.write().await;
         sessions.retain(|(label, _), _| label != window_label);
-        eprintln!("[SessionManager] Removed all sessions for window: {}", window_label);
+        eprintln!(
+            "[SessionManager] Removed all sessions for window: {}",
+            window_label
+        );
     }
 
     /// Get all sessions
@@ -238,10 +246,7 @@ impl SessionManager {
     /// * `Vec<String>` - All unique window labels
     pub async fn all_window_labels(&self) -> Vec<String> {
         let sessions = self.sessions.read().await;
-        let mut labels: Vec<String> = sessions
-            .keys()
-            .map(|(label, _)| label.clone())
-            .collect();
+        let mut labels: Vec<String> = sessions.keys().map(|(label, _)| label.clone()).collect();
         labels.sort();
         labels.dedup();
         labels
@@ -271,7 +276,8 @@ impl SessionManager {
         icon: Option<String>,
         accounts: Vec<Address>,
     ) -> Result<(), WalletError> {
-        self.create_session_for_window("", &origin, name, icon, accounts).await
+        self.create_session_for_window("", &origin, name, icon, accounts)
+            .await
     }
 
     /// Get session (legacy - uses empty window label)
@@ -365,7 +371,10 @@ impl SessionManager {
     ) -> Result<(), WalletError> {
         let mut sessions = self.sessions.write().await;
 
-        eprintln!("[SessionManager] Creating AUTO-APPROVED session for window: {}, origin: {}", window_label, origin);
+        eprintln!(
+            "[SessionManager] Creating AUTO-APPROVED session for window: {}, origin: {}",
+            window_label, origin
+        );
 
         let connection = DappConnection {
             window_label: window_label.to_string(),
@@ -386,13 +395,16 @@ impl SessionManager {
 
         let key = (window_label.to_string(), origin.to_string());
         sessions.insert(key, connection);
-        eprintln!("[SessionManager] Auto-approved session created. Total sessions: {}", sessions.len());
+        eprintln!(
+            "[SessionManager] Auto-approved session created. Total sessions: {}",
+            sessions.len()
+        );
         Ok(())
     }
 
     /// Update accounts for all active sessions
     ///
-    /// Useful when the global active account changes and we want to 
+    /// Useful when the global active account changes and we want to
     /// explicitly switch the authorized accounts for connected dApps.
     ///
     /// # Arguments
@@ -400,12 +412,15 @@ impl SessionManager {
     /// * `accounts` - The new authorized accounts list
     pub async fn update_all_sessions_accounts(&self, accounts: Vec<Address>) {
         let mut sessions = self.sessions.write().await;
-        
-        eprintln!("[SessionManager] Updating accounts for all {} active sessions", sessions.len());
-        
+
+        eprintln!(
+            "[SessionManager] Updating accounts for all {} active sessions",
+            sessions.len()
+        );
+
         for (_, session) in sessions.iter_mut() {
             session.accounts = accounts.clone();
-            
+
             // Also bump activity to keep them alive
             session.last_activity = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -449,7 +464,10 @@ mod tests {
             .unwrap();
 
         // Get session
-        let session = manager.get_session_by_window(window_label, origin).await.unwrap();
+        let session = manager
+            .get_session_by_window(window_label, origin)
+            .await
+            .unwrap();
         assert_eq!(session.window_label, window_label);
         assert_eq!(session.origin, origin);
         assert_eq!(session.name, Some("Uniswap".to_string()));
@@ -474,8 +492,14 @@ mod tests {
             .unwrap();
 
         // Both sessions should exist independently
-        assert!(manager.get_session_by_window(window1, origin).await.is_some());
-        assert!(manager.get_session_by_window(window2, origin).await.is_some());
+        assert!(manager
+            .get_session_by_window(window1, origin)
+            .await
+            .is_some());
+        assert!(manager
+            .get_session_by_window(window2, origin)
+            .await
+            .is_some());
 
         // Should have 2 sessions total
         assert_eq!(manager.session_count().await, 2);
@@ -488,7 +512,10 @@ mod tests {
         let origin = "https://app.uniswap.org";
 
         // Should fail (no session)
-        assert!(manager.validate_session_for_window(window_label, origin).await.is_err());
+        assert!(manager
+            .validate_session_for_window(window_label, origin)
+            .await
+            .is_err());
 
         // Create session
         manager
@@ -497,13 +524,22 @@ mod tests {
             .unwrap();
 
         // Should succeed
-        assert!(manager.validate_session_for_window(window_label, origin).await.is_ok());
+        assert!(manager
+            .validate_session_for_window(window_label, origin)
+            .await
+            .is_ok());
 
         // Should fail (different origin)
-        assert!(manager.validate_session_for_window(window_label, "https://evil.com").await.is_err());
+        assert!(manager
+            .validate_session_for_window(window_label, "https://evil.com")
+            .await
+            .is_err());
 
         // Should fail (different window)
-        assert!(manager.validate_session_for_window("dapp-window-2", origin).await.is_err());
+        assert!(manager
+            .validate_session_for_window("dapp-window-2", origin)
+            .await
+            .is_err());
     }
 
     #[tokio::test]
@@ -518,16 +554,25 @@ mod tests {
             .await
             .unwrap();
 
-        let session1 = manager.get_session_by_window(window_label, origin).await.unwrap();
+        let session1 = manager
+            .get_session_by_window(window_label, origin)
+            .await
+            .unwrap();
         let activity1 = session1.last_activity;
 
         // Wait a bit
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        
-        // Update activity
-        manager.update_activity_for_window(window_label, origin).await.unwrap();
 
-        let session2 = manager.get_session_by_window(window_label, origin).await.unwrap();
+        // Update activity
+        manager
+            .update_activity_for_window(window_label, origin)
+            .await
+            .unwrap();
+
+        let session2 = manager
+            .get_session_by_window(window_label, origin)
+            .await
+            .unwrap();
         let activity2 = session2.last_activity;
 
         // Activity should be updated
@@ -547,13 +592,19 @@ mod tests {
             .unwrap();
 
         // Should exist
-        assert!(manager.get_session_by_window(window_label, origin).await.is_some());
+        assert!(manager
+            .get_session_by_window(window_label, origin)
+            .await
+            .is_some());
 
         // Remove
         manager.remove_session_by_window(window_label, origin).await;
 
         // Should not exist
-        assert!(manager.get_session_by_window(window_label, origin).await.is_none());
+        assert!(manager
+            .get_session_by_window(window_label, origin)
+            .await
+            .is_none());
     }
 
     #[tokio::test]
@@ -587,11 +638,20 @@ mod tests {
         assert_eq!(manager.session_count().await, 1);
 
         // Window 1 sessions should be gone
-        assert!(manager.get_session_by_window(window_label, "https://app.uniswap.org").await.is_none());
-        assert!(manager.get_session_by_window(window_label, "https://app.aave.com").await.is_none());
+        assert!(manager
+            .get_session_by_window(window_label, "https://app.uniswap.org")
+            .await
+            .is_none());
+        assert!(manager
+            .get_session_by_window(window_label, "https://app.aave.com")
+            .await
+            .is_none());
 
         // Window 2 session should still exist
-        assert!(manager.get_session_by_window("dapp-window-2", "https://app.1inch.io").await.is_some());
+        assert!(manager
+            .get_session_by_window("dapp-window-2", "https://app.1inch.io")
+            .await
+            .is_some());
     }
 
     #[tokio::test]
@@ -611,7 +671,10 @@ mod tests {
         // Get all session keys
         let sessions = manager.all_sessions().await;
         assert_eq!(sessions.len(), 2);
-        assert!(sessions.contains(&("window-1".to_string(), "https://app.uniswap.org".to_string())));
+        assert!(sessions.contains(&(
+            "window-1".to_string(),
+            "https://app.uniswap.org".to_string()
+        )));
         assert!(sessions.contains(&("window-2".to_string(), "https://app.aave.com".to_string())));
     }
 
@@ -660,8 +723,11 @@ mod tests {
             .unwrap();
 
         // Get session
-        let session = manager.get_session_by_window(window_label, origin).await.unwrap();
-        
+        let session = manager
+            .get_session_by_window(window_label, origin)
+            .await
+            .unwrap();
+
         // Verify it's marked as auto-approved
         assert_eq!(session.auto_approved, true);
         assert_eq!(session.window_label, window_label);
@@ -687,11 +753,17 @@ mod tests {
             .unwrap();
 
         // Check manual session
-        let manual = manager.get_session_by_window("window-1", origin).await.unwrap();
+        let manual = manager
+            .get_session_by_window("window-1", origin)
+            .await
+            .unwrap();
         assert_eq!(manual.auto_approved, false);
 
         // Check auto-approved session
-        let auto = manager.get_session_by_window("window-2", origin).await.unwrap();
+        let auto = manager
+            .get_session_by_window("window-2", origin)
+            .await
+            .unwrap();
         assert_eq!(auto.auto_approved, true);
     }
 
@@ -703,22 +775,42 @@ mod tests {
 
         // Create multiple sessions with old accounts
         manager
-            .create_session_for_window("window-1", "https://app.uniswap.org", None, None, old_accounts.clone())
+            .create_session_for_window(
+                "window-1",
+                "https://app.uniswap.org",
+                None,
+                None,
+                old_accounts.clone(),
+            )
             .await
             .unwrap();
         manager
-            .create_session_for_window("window-2", "https://app.aave.com", None, None, old_accounts.clone())
+            .create_session_for_window(
+                "window-2",
+                "https://app.aave.com",
+                None,
+                None,
+                old_accounts.clone(),
+            )
             .await
             .unwrap();
 
         // Update all sessions to new accounts
-        manager.update_all_sessions_accounts(new_accounts.clone()).await;
+        manager
+            .update_all_sessions_accounts(new_accounts.clone())
+            .await;
 
         // Verify both sessions were updated
-        let session1 = manager.get_session_by_window("window-1", "https://app.uniswap.org").await.unwrap();
+        let session1 = manager
+            .get_session_by_window("window-1", "https://app.uniswap.org")
+            .await
+            .unwrap();
         assert_eq!(session1.accounts, new_accounts);
 
-        let session2 = manager.get_session_by_window("window-2", "https://app.aave.com").await.unwrap();
+        let session2 = manager
+            .get_session_by_window("window-2", "https://app.aave.com")
+            .await
+            .unwrap();
         assert_eq!(session2.accounts, new_accounts);
     }
 }

@@ -294,29 +294,29 @@ mod tests {
     fn test_logging_functions_compile() {
         // Just verify all functions compile and can be called
         // Actual output testing would require capturing logs
-        
+
         log_websocket_connection("127.0.0.1:8766", "test-window");
         log_websocket_disconnection("127.0.0.1:8766", "test-window", "normal");
         log_websocket_error("127.0.0.1:8766", "test error");
         log_websocket_startup(8766);
-        
+
         log_rpc_request("eth_call", "https://test.com", 100);
         log_rpc_request_start("eth_call", "https://test.com", 1);
         log_rpc_request_success("eth_call", "https://test.com", 1, 100);
         log_rpc_request_error("eth_call", "https://test.com", 1, "test error");
-        
+
         log_rate_limit_exceeded("https://test.com", "eth_call", "per-second");
         log_rate_limit_passed("https://test.com", "eth_call");
-        
+
         log_approval_request_created("test-id", "connection", "https://test.com", "test-window");
         log_approval_granted("test-id", "connection");
         log_approval_rejected("test-id", "connection");
         log_approval_timeout("test-id", "connection");
-        
+
         log_session_created("https://test.com", "test-window", 369);
         log_session_updated("https://test.com", "test-window", "accounts");
         log_session_removed("https://test.com", "test-window");
-        
+
         log_health_metrics(10, 5, 100, 2, 3600);
     }
 }

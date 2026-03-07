@@ -95,30 +95,34 @@ pub async fn switch_network(
     state: State<'_, VaughanState>,
     request: SwitchNetworkRequest,
 ) -> Result<(), String> {
-    eprintln!("[Network] Switching network: {} (chain_id: {})", request.network_id, request.chain_id);
-    
+    eprintln!(
+        "[Network] Switching network: {} (chain_id: {})",
+        request.network_id, request.chain_id
+    );
+
     // Switch network
     state
         .switch_network(&request.network_id, &request.rpc_url, request.chain_id)
         .await
         .map_err(|e| e.user_message())?;
-    
+
     eprintln!("[Network] Network switched successfully");
 
     // ========================================================================
     // Emit chainChanged event to all dApp windows (Phase 3.4 - Task 4.2)
     // ========================================================================
-    
+
     // Get new chain ID (hex format for EIP-1193 compliance)
     let chain_id_hex = format!("0x{:x}", request.chain_id);
-    
+
     // Collect window labels first (avoid holding lock during emit)
-    let window_labels: Vec<String> = {
-        state.window_registry.get_all_labels().await
-    }; // Lock released here
-    
-    eprintln!("[Network] Emitting chainChanged to {} windows", window_labels.len());
-    
+    let window_labels: Vec<String> = { state.window_registry.get_all_labels().await }; // Lock released here
+
+    eprintln!(
+        "[Network] Emitting chainChanged to {} windows",
+        window_labels.len()
+    );
+
     // Emit to all dApp windows (without holding lock)
     for window_label in window_labels {
         if let Some(window) = app.get_webview_window(&window_label) {
@@ -221,7 +225,7 @@ pub async fn get_network_info(
         chain_id: chain_info.chain_id.unwrap_or(0),
         rpc_url: adapter.rpc_url().to_string(),
         explorer_url: crate::chains::evm::networks::get_network_by_chain_id(
-            chain_info.chain_id.unwrap_or(0)
+            chain_info.chain_id.unwrap_or(0),
         )
         .and_then(|n| n.explorer_url)
         .unwrap_or_default(),

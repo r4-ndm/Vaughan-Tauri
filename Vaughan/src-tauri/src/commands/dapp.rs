@@ -4,7 +4,6 @@
 ///!
 ///! **PHASE 3.4 UPDATE**: Window-specific security validation to prevent
 ///! cross-window attacks and origin spoofing.
-
 use crate::dapp::{rpc_handler, DappConnection};
 use crate::error::WalletError;
 use crate::state::VaughanState;
@@ -80,13 +79,16 @@ fn emit_to_window<T: Serialize + Clone>(
     event: &str,
     payload: T,
 ) -> Result<(), String> {
-    eprintln!("[dApp] Emitting event '{}' to window: {}", event, window_label);
-    
+    eprintln!(
+        "[dApp] Emitting event '{}' to window: {}",
+        event, window_label
+    );
+
     app.get_webview_window(window_label)
         .ok_or_else(|| format!("Window {} not found", window_label))?
         .emit(event, payload)
         .map_err(|e| format!("Failed to emit event: {}", e))?;
-    
+
     eprintln!("[dApp] Event '{}' emitted successfully", event);
     Ok(())
 }
@@ -114,7 +116,11 @@ impl ProcessedRequests {
 
         // Keep only last 1000 requests (prevent memory growth)
         if requests.len() > 1000 {
-            let to_remove: Vec<String> = requests.iter().take(requests.len() - 1000).cloned().collect();
+            let to_remove: Vec<String> = requests
+                .iter()
+                .take(requests.len() - 1000)
+                .cloned()
+                .collect();
             for id in to_remove {
                 requests.remove(&id);
             }
@@ -177,18 +183,25 @@ pub async fn dapp_request(
     // Extract origin - either from parameter (iframe) or window URL (native WebView)
     let origin = if let Some(provided_origin) = origin {
         // Iframe-based dApp - origin provided by bridge
-        eprintln!("[dapp_request] Origin (from parameter - iframe): {}", provided_origin);
+        eprintln!(
+            "[dapp_request] Origin (from parameter - iframe): {}",
+            provided_origin
+        );
         provided_origin
     } else {
         // Native WebView - extract from window URL
-        let window_url = window.url()
+        let window_url = window
+            .url()
             .map_err(|e| format!("Failed to get window URL: {}", e))?;
-        
+
         let extracted_origin = window_url.origin().ascii_serialization();
-        eprintln!("[dapp_request] Origin (from window URL - native): {}", extracted_origin);
+        eprintln!(
+            "[dapp_request] Origin (from window URL - native): {}",
+            extracted_origin
+        );
         extracted_origin
     };
-    
+
     eprintln!("[dapp_request] Method: {}", request.method);
 
     // Log for security auditing
@@ -203,9 +216,16 @@ pub async fn dapp_request(
 
     // Create rate limit key (window_label:origin)
     let rate_limit_key = format!("{}:{}", window_label, origin);
-    
-    if let Err(e) = state.rate_limiter.check_limit(&rate_limit_key, &request.method).await {
-        eprintln!("[dapp_request] Rate limit exceeded: {} for method {}", rate_limit_key, request.method);
+
+    if let Err(e) = state
+        .rate_limiter
+        .check_limit(&rate_limit_key, &request.method)
+        .await
+    {
+        eprintln!(
+            "[dapp_request] Rate limit exceeded: {} for method {}",
+            rate_limit_key, request.method
+        );
         return Ok(DappResponse {
             id: request.id,
             result: None,
@@ -228,7 +248,10 @@ pub async fn dapp_request(
         .as_secs();
 
     if now > request.timestamp && (now - request.timestamp) > 300 {
-        eprintln!("[dapp_request] Request expired: {} seconds old", now - request.timestamp);
+        eprintln!(
+            "[dapp_request] Request expired: {} seconds old",
+            now - request.timestamp
+        );
         return Ok(DappResponse {
             id: request.id,
             result: None,
@@ -267,30 +290,46 @@ pub async fn dapp_request(
         "net_version",
         "eth_blockNumber",
         "eth_requestAccounts",
-        "eth_accounts"
+        "eth_accounts",
     ];
 
     if !no_auth_methods.contains(&request.method.as_str()) {
         // Check if session exists for this window+origin
-        eprintln!("[dapp_request] Validating session for window={}, origin={}", window_label, origin);
-        
-        if let Err(e) = state.session_manager.validate_session_for_window(&window_label, &origin).await {
+        eprintln!(
+            "[dapp_request] Validating session for window={}, origin={}",
+            window_label, origin
+        );
+
+        if let Err(e) = state
+            .session_manager
+            .validate_session_for_window(&window_label, &origin)
+            .await
+        {
             eprintln!("[dapp_request] Session validation failed: {}", e);
-            eprintln!("[dapp_request] Active sessions: {:?}", state.session_manager.all_sessions().await);
-            
+            eprintln!(
+                "[dapp_request] Active sessions: {:?}",
+                state.session_manager.all_sessions().await
+            );
+
             return Ok(DappResponse {
                 id: request.id,
                 result: None,
                 error: Some(DappError {
                     code: 4100, // EIP-1193: Unauthorized
-                    message: format!("Not connected. Please call eth_requestAccounts first. Error: {}", e),
+                    message: format!(
+                        "Not connected. Please call eth_requestAccounts first. Error: {}",
+                        e
+                    ),
                     data: None,
                 }),
             });
         }
 
         // Update session activity
-        let _ = state.session_manager.update_activity_for_window(&window_label, &origin).await;
+        let _ = state
+            .session_manager
+            .update_activity_for_window(&window_label, &origin)
+            .await;
     }
 
     // ========================================================================
@@ -298,7 +337,16 @@ pub async fn dapp_request(
     // ========================================================================
 
     // Pass window_label to rpc_handler for approval routing
-    match rpc_handler::handle_request(&app, &state, &window_label, &origin, &request.method, request.params).await {
+    match rpc_handler::handle_request(
+        &app,
+        &state,
+        &window_label,
+        &origin,
+        &request.method,
+        request.params,
+    )
+    .await
+    {
         Ok(result) => {
             // Mark as processed
             PROCESSED_REQUESTS.mark_processed(request.id.clone()).await;
@@ -309,10 +357,10 @@ pub async fn dapp_request(
                 result: Some(result),
                 error: None,
             })
-        }
+        },
         Err(e) => {
             eprintln!("[dapp_request] Request failed: {} - {}", request.id, e);
-            
+
             // Convert WalletError to DappError
             let (code, message) = match e {
                 WalletError::NotConnected => (4100, "Not connected".to_string()),
@@ -335,7 +383,7 @@ pub async fn dapp_request(
                     data: None,
                 }),
             })
-        }
+        },
     }
 }
 
@@ -365,17 +413,22 @@ pub async fn connect_dapp(
 ) -> Result<Vec<String>, String> {
     // Extract window label and origin
     let window_label = window.label().to_string();
-    let window_url = window.url()
+    let window_url = window
+        .url()
         .map_err(|e| format!("Failed to get window URL: {}", e))?;
     let origin = window_url.origin().ascii_serialization();
 
-    eprintln!("[connect_dapp] Connecting: window={}, origin={}", window_label, origin);
+    eprintln!(
+        "[connect_dapp] Connecting: window={}, origin={}",
+        window_label, origin
+    );
 
     // Get active account
     let account = state.active_account().await.map_err(|e| e.to_string())?;
 
     // Create session for this window
-    state.session_manager
+    state
+        .session_manager
         .create_session_for_window(&window_label, &origin, name, icon, vec![account])
         .await
         .map_err(|e| e.to_string())?;
@@ -405,14 +458,21 @@ pub async fn disconnect_dapp(
 ) -> Result<(), String> {
     // Extract window label and origin
     let window_label = window.label().to_string();
-    let window_url = window.url()
+    let window_url = window
+        .url()
         .map_err(|e| format!("Failed to get window URL: {}", e))?;
     let origin = window_url.origin().ascii_serialization();
 
-    eprintln!("[disconnect_dapp] Disconnecting: window={}, origin={}", window_label, origin);
+    eprintln!(
+        "[disconnect_dapp] Disconnecting: window={}, origin={}",
+        window_label, origin
+    );
 
-    state.session_manager.remove_session_by_window(&window_label, &origin).await;
-    
+    state
+        .session_manager
+        .remove_session_by_window(&window_label, &origin)
+        .await;
+
     eprintln!("[disconnect_dapp] Session removed successfully");
     Ok(())
 }
@@ -446,20 +506,32 @@ pub async fn disconnect_dapp_by_origin(
     state: State<'_, VaughanState>,
     origin: String,
 ) -> Result<(), String> {
-    eprintln!("[disconnect_dapp_by_origin] Disconnecting from origin: {}", origin);
-    
+    eprintln!(
+        "[disconnect_dapp_by_origin] Disconnecting from origin: {}",
+        origin
+    );
+
     // Get all sessions
     let all_sessions = state.session_manager.all_sessions().await;
-    
+
     // Remove sessions matching the origin
     for (window_label, session_origin) in all_sessions {
         if session_origin == origin {
-            eprintln!("[disconnect_dapp_by_origin] Removing session: window={}, origin={}", window_label, session_origin);
-            state.session_manager.remove_session_by_window(&window_label, &session_origin).await;
+            eprintln!(
+                "[disconnect_dapp_by_origin] Removing session: window={}, origin={}",
+                window_label, session_origin
+            );
+            state
+                .session_manager
+                .remove_session_by_window(&window_label, &session_origin)
+                .await;
         }
     }
-    
-    eprintln!("[disconnect_dapp_by_origin] Disconnected from origin: {}", origin);
+
+    eprintln!(
+        "[disconnect_dapp_by_origin] Disconnected from origin: {}",
+        origin
+    );
     Ok(())
 }
 
@@ -501,24 +573,27 @@ pub async fn respond_to_approval(
     response: crate::dapp::ApprovalResponse,
 ) -> Result<(), String> {
     eprintln!("[dApp] Responding to approval: {}", response.id);
-    
+
     // Get approval request to find window label
-    let approval = state.approval_queue.get_request(&response.id).await
+    let approval = state
+        .approval_queue
+        .get_request(&response.id)
+        .await
         .ok_or_else(|| format!("Approval request not found: {}", response.id))?;
-    
+
     let window_label = approval.window_label.clone();
     eprintln!("[dApp] Approval window label: {}", window_label);
-    
+
     // Respond to approval (this sends via channel)
     state
         .approval_queue
         .respond(response.clone())
         .await
         .map_err(|e| e.to_string())?;
-    
+
     // Emit event to dApp window (for provider to receive)
     emit_to_window(&app, &window_label, "approval_response", response)?;
-    
+
     eprintln!("[dApp] Approval response sent successfully");
     Ok(())
 }
@@ -535,10 +610,7 @@ pub async fn respond_to_approval(
 /// * `Ok(())` - Request cancelled successfully
 /// * `Err(String)` - If request not found or other error
 #[tauri::command]
-pub async fn cancel_approval(
-    state: State<'_, VaughanState>,
-    id: String,
-) -> Result<(), String> {
+pub async fn cancel_approval(state: State<'_, VaughanState>, id: String) -> Result<(), String> {
     state
         .approval_queue
         .cancel(&id)
@@ -558,15 +630,10 @@ pub async fn cancel_approval(
 ///
 /// * `Ok(())` - All requests cleared
 #[tauri::command]
-pub async fn clear_all_approvals(
-    state: State<'_, VaughanState>,
-) -> Result<(), String> {
+pub async fn clear_all_approvals(state: State<'_, VaughanState>) -> Result<(), String> {
     state.approval_queue.clear_all().await;
     Ok(())
 }
-
-
-
 
 // ============================================================================
 // Performance Monitoring Commands
@@ -613,13 +680,13 @@ pub async fn get_performance_stats(
 #[tauri::command]
 pub async fn launch_external_app(exe_path: String) -> Result<(), String> {
     eprintln!("[Dapp] Launching external app: {}", exe_path);
-    
+
     // Validate path exists
     let path = std::path::Path::new(&exe_path);
     if !path.exists() {
         return Err(format!("Executable not found: {}", exe_path));
     }
-    
+
     // Launch process in background
     #[cfg(target_os = "windows")]
     {
@@ -627,14 +694,14 @@ pub async fn launch_external_app(exe_path: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| format!("Failed to launch: {}", e))?;
     }
-    
+
     #[cfg(not(target_os = "windows"))]
     {
         std::process::Command::new(&exe_path)
             .spawn()
             .map_err(|e| format!("Failed to launch: {}", e))?;
     }
-    
+
     eprintln!("[Dapp] External app launched successfully");
     Ok(())
 }

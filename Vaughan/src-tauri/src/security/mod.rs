@@ -41,31 +41,31 @@ mod tests {
     #[test]
     fn test_security_dependencies() {
         // This test verifies that all security crates compile and link correctly
-        
+
         // Test keyring (will test actual functionality in keyring_service tests)
         let _keyring = keyring::Entry::new("test_service", "test_user");
-        
+
         // Test bip39
         use bip39::{Language, Mnemonic};
         use rand::RngCore;
-        
+
         // Generate 16 bytes of entropy for 12-word mnemonic
         let mut entropy = [0u8; 16];
         rand::thread_rng().fill_bytes(&mut entropy);
-        
+
         let mnemonic = Mnemonic::from_entropy_in(Language::English, &entropy).unwrap();
         assert_eq!(mnemonic.word_count(), 12);
-        
+
         // Test secrecy
         use secrecy::{ExposeSecret, Secret};
         let secret = Secret::new("test_secret".to_string());
         assert_eq!(secret.expose_secret(), "test_secret");
-        
+
         // Test rand
         use rand::Rng;
         let mut rng = rand::thread_rng();
         let _random_number: u32 = rng.gen();
-        
+
         println!("✅ All security dependencies available");
     }
 }

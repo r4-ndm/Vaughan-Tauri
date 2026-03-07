@@ -1,12 +1,11 @@
+use serde::Serialize;
 ///! Health Monitoring for WebSocket Server
 ///!
 ///! Tracks connection metrics, message counts, errors, and uptime
 ///! for the WebSocket server to aid in debugging and monitoring.
-
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
-use serde::Serialize;
 
 /// Health metrics for WebSocket server
 ///

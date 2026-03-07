@@ -4,11 +4,10 @@
 ///!
 ///! **PHASE 3.4**: Native WebView implementation with proper security,
 ///! window-specific session management, and comprehensive cleanup.
-
 use crate::state::VaughanState;
+use lazy_static::lazy_static;
 use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use url::Url;
-use lazy_static::lazy_static;
 
 // ============================================================================
 // Provider Script (Lazy-loaded for performance)
@@ -18,7 +17,7 @@ lazy_static! {
     /// Provider script for IPC mode (Tauri IPC via postMessage bridge, CSP-safe)
     /// This is the ACTIVE provider implementation - works with all sites including HTTPS
     /// Uses Tauri IPC instead of WebSocket, bypasses CSP via initialization_script
-    static ref PROVIDER_SCRIPT_IPC: String = 
+    static ref PROVIDER_SCRIPT_IPC: String =
         include_str!("provider-inject-ipc.js").to_string();
 }
 
@@ -47,16 +46,12 @@ lazy_static! {
 /// - javascript:// (code execution)
 /// - about:// (browser internals)
 fn validate_url(url: &str) -> Result<Url, String> {
-    let parsed = Url::parse(url)
-        .map_err(|e| format!("Invalid URL: {}", e))?;
-    
+    let parsed = Url::parse(url).map_err(|e| format!("Invalid URL: {}", e))?;
+
     // Only allow http/https
     match parsed.scheme() {
         "http" | "https" => Ok(parsed),
-        scheme => Err(format!(
-            "Only HTTP(S) URLs allowed, got: {}://",
-            scheme
-        )),
+        scheme => Err(format!("Only HTTP(S) URLs allowed, got: {}://", scheme)),
     }
 }
 
@@ -95,7 +90,7 @@ pub async fn open_dapp_window(
     // Validate URL
     let validated_url = validate_url(&url)?;
     eprintln!("[Window] URL validated: {}", validated_url);
-    
+
     // Create WebView URL (direct external URL)
     let window_url = WebviewUrl::External(validated_url.clone());
 
@@ -118,9 +113,7 @@ pub async fn open_dapp_window(
             // Provider script
             {}
             "#,
-            window_label,
-            origin,
-            script
+            window_label, origin, script
         )
     } else {
         eprintln!("[Window] Using default PROVIDER_SCRIPT_IPC (Tauri IPC bridge, CSP-safe)");
@@ -138,7 +131,10 @@ pub async fn open_dapp_window(
             PROVIDER_SCRIPT_IPC.as_str()
         )
     };
-    eprintln!("[Window] Provider script prepared ({} bytes)", provider_script.len());
+    eprintln!(
+        "[Window] Provider script prepared ({} bytes)",
+        provider_script.len()
+    );
 
     // Create WebView window with provider injected
     let _window = WebviewWindowBuilder::new(
@@ -158,7 +154,10 @@ pub async fn open_dapp_window(
 
     // Register window in WindowRegistry
     let origin = validated_url.origin().ascii_serialization();
-    state.window_registry.register_window(&window_label, &origin).await
+    state
+        .window_registry
+        .register_window(&window_label, &origin)
+        .await
         .map_err(|e| format!("Failed to register window: {}", e))?;
 
     eprintln!("[Window] Window registered: {} -> {}", window_label, origin);
@@ -171,20 +170,30 @@ pub async fn open_dapp_window(
     // 2. User explicitly clicked "Open dApp" (clear intent)
     // 3. Connection only reveals address (no private keys)
     // 4. Transactions still require approval
-    
+
     // Get active account
     if let Ok(account) = state.active_account().await {
-        eprintln!("[Window] Creating auto-approved session for account: {:?}", account);
-        
+        eprintln!(
+            "[Window] Creating auto-approved session for account: {:?}",
+            account
+        );
+
         // Create auto-approved session
-        if let Err(e) = state.session_manager.create_auto_approved_session(
-            &window_label,
-            &origin,
-            title,
-            None, // icon
-            vec![account],
-        ).await {
-            eprintln!("[Window] Warning: Failed to create auto-approved session: {}", e);
+        if let Err(e) = state
+            .session_manager
+            .create_auto_approved_session(
+                &window_label,
+                &origin,
+                title,
+                None, // icon
+                vec![account],
+            )
+            .await
+        {
+            eprintln!(
+                "[Window] Warning: Failed to create auto-approved session: {}",
+                e
+            );
             // Don't fail window creation if session creation fails
         } else {
             eprintln!("[Window] Auto-approved session created successfully");
@@ -194,7 +203,7 @@ pub async fn open_dapp_window(
     }
 
     eprintln!("[Window] Window opened successfully: {}", window_label);
-    
+
     Ok(window_label)
 }
 
@@ -247,10 +256,9 @@ pub async fn open_dapp_url(
         urlencoding::encode(&url)
     );
     eprintln!("[Window] Using proxy URL: {}", proxy_url);
-    
+
     let window_url = WebviewUrl::External(
-        Url::parse(&proxy_url)
-            .map_err(|e| format!("Invalid proxy URL: {}", e))?
+        Url::parse(&proxy_url).map_err(|e| format!("Invalid proxy URL: {}", e))?,
     );
 
     // Generate unique window label
@@ -259,32 +267,37 @@ pub async fn open_dapp_url(
 
     // Get provider script (lazy-loaded) - using IPC provider
     let provider_script = PROVIDER_SCRIPT_IPC.as_str();
-    eprintln!("[Window] Provider script loaded ({} bytes)", provider_script.len());
+    eprintln!(
+        "[Window] Provider script loaded ({} bytes)",
+        provider_script.len()
+    );
 
     // Create WebView window
     // Provider script injected via initialization_script (runs before page loads)
     // Proxy serves content from localhost, so Tauri API is available
-    let _window = WebviewWindowBuilder::new(
-        &app,
-        &window_label,
-        window_url,
-    )
-    .title("Vaughan - dApp Browser")
-    .inner_size(1200.0, 800.0)
-    .min_inner_size(800.0, 600.0)
-    .resizable(true)
-    .initialization_script(provider_script)
-    .build()
-    .map_err(|e| format!("Failed to create window: {}", e))?;
+    let _window = WebviewWindowBuilder::new(&app, &window_label, window_url)
+        .title("Vaughan - dApp Browser")
+        .inner_size(1200.0, 800.0)
+        .min_inner_size(800.0, 600.0)
+        .resizable(true)
+        .initialization_script(provider_script)
+        .build()
+        .map_err(|e| format!("Failed to create window: {}", e))?;
 
     eprintln!("[Window] WebView window created: {}", window_label);
 
     // Register window in WindowRegistry
     let origin = validated_url.origin().ascii_serialization();
-    state.window_registry.register_window(&window_label, &origin).await
+    state
+        .window_registry
+        .register_window(&window_label, &origin)
+        .await
         .map_err(|e| format!("Failed to register window: {}", e))?;
 
-    eprintln!("[Window] Window registered in registry: {} -> {}", window_label, origin);
+    eprintln!(
+        "[Window] Window registered in registry: {} -> {}",
+        window_label, origin
+    );
 
     eprintln!("[Window] Window opened successfully: {}", window_label);
     Ok(window_label)
@@ -336,19 +349,27 @@ pub async fn navigate_dapp(
     eprintln!("[Window] URL validated: {}", validated_url);
 
     // Get window
-    let window = app.get_webview_window(&window_label)
+    let window = app
+        .get_webview_window(&window_label)
         .ok_or_else(|| format!("Window not found: {}", window_label))?;
 
     // Navigate to URL
-    window.navigate(validated_url.clone())
+    window
+        .navigate(validated_url.clone())
         .map_err(|e| format!("Failed to navigate: {}", e))?;
 
     // Update window registry with new origin
     let new_origin = validated_url.origin().ascii_serialization();
-    state.window_registry.update_origin(&window_label, &new_origin).await
+    state
+        .window_registry
+        .update_origin(&window_label, &new_origin)
+        .await
         .map_err(|e| format!("Failed to update registry: {}", e))?;
 
-    eprintln!("[Window] Registry updated with new origin: {} -> {}", window_label, new_origin);
+    eprintln!(
+        "[Window] Registry updated with new origin: {} -> {}",
+        window_label, new_origin
+    );
 
     eprintln!("[Window] Navigation successful: {}", window_label);
     Ok(())
@@ -398,7 +419,8 @@ pub async fn close_dapp(
     eprintln!("[Window] Closing dApp window: {}", window_label);
 
     // Get window
-    let window = app.get_webview_window(&window_label)
+    let window = app
+        .get_webview_window(&window_label)
         .ok_or_else(|| format!("Window not found: {}", window_label))?;
 
     // ========================================================================
@@ -407,7 +429,10 @@ pub async fn close_dapp(
 
     // 1. Clean up sessions for window
     eprintln!("[Window] Cleaning up sessions for window: {}", window_label);
-    state.session_manager.remove_all_sessions_for_window(&window_label).await;
+    state
+        .session_manager
+        .remove_all_sessions_for_window(&window_label)
+        .await;
 
     // 2. Clear approvals for window
     eprintln!("[Window] Clearing approvals for window: {}", window_label);
@@ -419,7 +444,8 @@ pub async fn close_dapp(
 
     // 4. Close window
     eprintln!("[Window] Closing window: {}", window_label);
-    window.close()
+    window
+        .close()
         .map_err(|e| format!("Failed to close window: {}", e))?;
 
     eprintln!("[Window] Window closed and cleaned up: {}", window_label);
@@ -448,18 +474,17 @@ pub async fn close_dapp(
 /// });
 /// ```
 #[tauri::command]
-pub async fn get_dapp_url(
-    app: AppHandle,
-    window_label: String,
-) -> Result<String, String> {
+pub async fn get_dapp_url(app: AppHandle, window_label: String) -> Result<String, String> {
     eprintln!("[Window] Getting URL for window: {}", window_label);
 
     // Get window
-    let window = app.get_webview_window(&window_label)
+    let window = app
+        .get_webview_window(&window_label)
         .ok_or_else(|| format!("Window not found: {}", window_label))?;
 
     // Get URL
-    let url = window.url()
+    let url = window
+        .url()
         .map_err(|e| format!("Failed to get URL: {}", e))?;
 
     eprintln!("[Window] Current URL: {}", url);
@@ -481,12 +506,9 @@ pub async fn get_dapp_url(
 /// * `Ok(())` - Window opened successfully
 /// * `Err(String)` - Failed to open window
 #[tauri::command]
-pub async fn open_dapp_browser(
-    app: AppHandle,
-    _url: Option<String>,
-) -> Result<(), String> {
+pub async fn open_dapp_browser(app: AppHandle, _url: Option<String>) -> Result<(), String> {
     let window_label = format!("dapp-browser-{}", uuid::Uuid::new_v4());
-    
+
     // For now, always open the browser page (URL passing can be added later)
     let browser_url = "http://localhost:1420/dapp-browser.html";
 
@@ -494,7 +516,11 @@ pub async fn open_dapp_browser(
     WebviewWindowBuilder::new(
         &app,
         &window_label,
-        WebviewUrl::External(browser_url.parse().map_err(|e| format!("Invalid URL: {}", e))?),
+        WebviewUrl::External(
+            browser_url
+                .parse()
+                .map_err(|e| format!("Invalid URL: {}", e))?,
+        ),
     )
     .title("Vaughan - dApp Browser")
     .inner_size(1200.0, 800.0)

@@ -93,13 +93,9 @@ async fn poc2_adapter_creation_and_caching() {
     {
         let mut cache = adapter_cache.lock().await;
         let adapter = Arc::new(
-            EvmAdapter::new(
-                "https://polygon-rpc.com",
-                "polygon".to_string(),
-                137,
-            )
-            .await
-            .expect("Failed to create polygon adapter"),
+            EvmAdapter::new("https://polygon-rpc.com", "polygon".to_string(), 137)
+                .await
+                .expect("Failed to create polygon adapter"),
         );
         cache.insert("polygon".to_string(), adapter);
         assert_eq!(cache.len(), 2, "Cache should have 2 adapters");
@@ -202,7 +198,10 @@ async fn poc3_fee_estimation() {
 async fn poc4_full_integration() {
     // 1. Network configs exist and are valid
     let networks = all_networks();
-    assert!(networks.len() >= 9, "Should have at least 9 predefined networks");
+    assert!(
+        networks.len() >= 9,
+        "Should have at least 9 predefined networks"
+    );
 
     let eth_network = get_network_by_chain_id(1).expect("Ethereum should be predefined");
     assert_eq!(eth_network.native_symbol, "ETH");
