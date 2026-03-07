@@ -27,6 +27,7 @@ use tauri::State;
 ///
 #[tauri::command]
 pub async fn handle_dapp_request(
+    app: tauri::AppHandle,
     state: State<'_, VaughanState>,
     window_label: String,
     origin: String,
@@ -38,6 +39,7 @@ pub async fn handle_dapp_request(
 
     // Use existing RPC handler
     let result = dapp::rpc_handler::handle_request(
+        &app,
         &*state,
         &window_label,
         &origin,

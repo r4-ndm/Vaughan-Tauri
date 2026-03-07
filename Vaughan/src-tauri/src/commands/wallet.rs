@@ -379,6 +379,74 @@ pub async fn delete_account(
     state.wallet_service.delete_account(&address).await
 }
 
+/// Rename an account
+///
+/// Updates the name of an existing account in the wallet and persists it to the keychain.
+///
+/// # Arguments
+///
+/// * `address` - Account address to rename
+/// * `newName` - The new name for the account
+/// * `password` - Wallet password to authorize modifying the keychain
+///
+/// # Returns
+///
+/// * `Ok(())` - Account renamed successfully
+/// * `Err(WalletError)` - If renaming fails, password invalid, or account doesn't exist
+#[tauri::command]
+pub async fn rename_account(
+    state: State<'_, VaughanState>,
+    address: String,
+    new_name: String,
+    password: String,
+) -> Result<(), WalletError> {
+    if password.is_empty() {
+        return Err(WalletError::InvalidPassword);
+    }
+    
+    let parsed_address = address
+        .parse()
+        .map_err(|_| WalletError::InvalidAddress(address.clone()))?;
+
+    state
+        .wallet_service
+        .rename_account(&parsed_address, new_name, &password)
+        .await
+}
+
+/// Export private key for an account
+///
+/// Returns the raw private key for a specific account.
+///
+/// # Arguments
+///
+/// * `address` - Account address to export
+/// * `password` - Wallet password to authorize
+///
+/// # Returns
+///
+/// * `Ok(String)` - Hex encoded private key with 0x prefix
+/// * `Err(WalletError)` - If export fails
+#[tauri::command]
+pub async fn export_private_key(
+    state: State<'_, VaughanState>,
+    address: String,
+    password: String,
+) -> Result<String, WalletError> {
+    if password.is_empty() {
+        return Err(WalletError::InvalidPassword);
+    }
+    
+    let parsed_address = address
+        .parse()
+        .map_err(|_| WalletError::InvalidAddress(address.clone()))?;
+
+    state
+        .wallet_service
+        .export_private_key(&parsed_address, &password)
+        .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -443,6 +511,14 @@ pub async fn set_active_account(
     eprintln!("[Wallet] Active account set: {}", address);
 
     // ========================================================================
+    // Update DApp sessions (Security Fix!)
+    // ========================================================================
+    // Update actual permissions for all active sessions before emitting the event.
+    // Otherwise, dApps will know the new account but still be authorized 
+    // for the old one leading to mismatched RPC handling.
+    state.session_manager.update_all_sessions_accounts(vec![address]).await;
+
+    // ========================================================================
     // Emit accountsChanged event to all dApp windows (Phase 3.4 - Task 4.1)
     // ========================================================================
     
@@ -467,4 +543,52 @@ pub async fn set_active_account(
     }
 
     Ok(())
+}
+
+/// Export wallet mnemonic (seed phrase)
+///
+/// Decrypts and returns the stored BIP-39 mnemonic phrase.
+/// Password is required as an authentication gate.
+///
+/// # Security
+///
+/// - Only the correct wallet password grants access
+/// - The mnemonic should NEVER be logged or stored outside the app
+/// - Show to user once and let them copy it; do not persist in frontend state
+///
+/// # Example (frontend)
+///
+/// ```typescript
+/// const mnemonic = await invoke('export_mnemonic', { password: 'my_password' });
+/// // Show to user — 12 or 24 space-separated words
+/// ```
+#[tauri::command]
+pub async fn export_mnemonic(
+    state: State<'_, VaughanState>,
+    password: String,
+) -> Result<String, WalletError> {
+    if password.is_empty() {
+        return Err(WalletError::InvalidPassword);
+    }
+    state.wallet_service.export_mnemonic(&password).await
+}
+
+/// Get the Railgun Mnemonic
+///
+/// Derives a deterministic 24-word mnemonic specifically for the Railgun Privacy Engine
+/// from the wallet's master seed.
+///
+/// # Security
+///
+/// - Requires password to unlock the master seed from the OS keychain.
+/// - Sent solely to the secure WebWorker context on the frontend.
+#[tauri::command]
+pub async fn get_railgun_mnemonic(
+    state: State<'_, VaughanState>,
+    password: String,
+) -> Result<String, WalletError> {
+    if password.is_empty() {
+        return Err(WalletError::InvalidPassword);
+    }
+    state.wallet_service.get_railgun_mnemonic(&password).await
 }

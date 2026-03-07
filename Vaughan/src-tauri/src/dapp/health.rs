@@ -34,7 +34,7 @@ pub struct HealthMetrics {
 /// # Example
 ///
 /// ```rust,no_run
-/// use vaughan::dapp::HealthMonitor;
+/// use vaughan_lib::dapp::HealthMonitor;
 ///
 /// let monitor = HealthMonitor::new();
 ///

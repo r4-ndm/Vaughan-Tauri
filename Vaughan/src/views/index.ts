@@ -6,6 +6,5 @@ export { CreateWalletView } from './CreateWalletView';
 export { ImportWalletView } from './ImportWalletView';
 export { UnlockWalletView } from './UnlockWalletView';
 export { DappBrowserView } from './DappBrowserView';
-export { DappBrowserHybrid } from './DappBrowserView/DappBrowserHybrid';
 export { DappBrowserDirect } from './DappBrowserView/DappBrowserDirect';
 export { DappBrowserSimple } from './DappBrowserView/DappBrowserSimple';

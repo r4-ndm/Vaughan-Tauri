@@ -8,6 +8,7 @@ use crate::error::WalletError;
 use crate::state::VaughanState;
 use alloy::primitives::{Address, U256};
 use serde_json::Value;
+use tauri::{AppHandle, Emitter, Manager};
 
 /// Handle dApp RPC request
 ///
@@ -15,6 +16,7 @@ use serde_json::Value;
 ///
 /// # Arguments
 ///
+/// * `app` - Tauri AppHandle (for event emission)
 /// * `state` - Application state
 /// * `window_label` - Window identifier (for approval routing)
 /// * `origin` - dApp origin
@@ -26,6 +28,7 @@ use serde_json::Value;
 /// * `Ok(Value)` - Method result
 /// * `Err(WalletError)` - Method failed
 pub async fn handle_request(
+    app: &AppHandle,
     state: &VaughanState,
     window_label: &str,
     origin: &str,
@@ -53,16 +56,16 @@ pub async fn handle_request(
         "eth_getTransactionReceipt" => handle_get_transaction_receipt(state, params).await,
 
         // Write Operations (require approval)
-        "eth_sendTransaction" => handle_send_transaction(state, window_label, origin, params).await,
-        "personal_sign" => handle_personal_sign(state, window_label, origin, params).await,
-        "eth_signTypedData_v4" => handle_sign_typed_data_v4(state, window_label, origin, params).await,
+        "eth_sendTransaction" => handle_send_transaction(app, state, window_label, origin, params).await,
+        "personal_sign" => handle_personal_sign(app, state, window_label, origin, params).await,
+        "eth_signTypedData_v4" => handle_sign_typed_data_v4(app, state, window_label, origin, params).await,
 
         // Network Switching (require approval)
         "wallet_switchEthereumChain" => handle_switch_chain(state, window_label, origin, params).await,
         "wallet_addEthereumChain" => handle_add_chain(state, window_label, origin, params).await,
 
         // Asset Management (EIP-747)
-        "wallet_watchAsset" => handle_watch_asset(state, window_label, origin, params).await,
+        "wallet_watchAsset" => handle_watch_asset(app, state, window_label, origin, params).await,
 
         // Permission Management (EIP-2255) - Stub implementations
         "wallet_requestPermissions" => handle_request_permissions(state, window_label, origin, params).await,
@@ -223,14 +226,93 @@ async fn handle_block_number(state: &VaughanState) -> Result<Value, WalletError>
     Ok(serde_json::json!(format!("0x{:x}", block_number)))
 }
 
-async fn handle_call(_state: &VaughanState, _params: Vec<Value>) -> Result<Value, WalletError> {
-    // For now, return unsupported (will implement in Phase 3.2)
-    Err(WalletError::UnsupportedMethod("eth_call".to_string()))
+async fn handle_call(state: &VaughanState, params: Vec<Value>) -> Result<Value, WalletError> {
+    // eth_call: [{ from, to, data, gas, value }, blockTag]
+    let tx_obj = params
+        .get(0)
+        .and_then(|v| v.as_object())
+        .ok_or(WalletError::InvalidParams)?;
+
+    use alloy::network::TransactionBuilder;
+    use alloy::primitives::Address;
+    use alloy::rpc::types::TransactionRequest;
+    use std::str::FromStr;
+
+    let mut tx = TransactionRequest::default();
+
+    if let Some(from) = tx_obj.get("from").and_then(|v| v.as_str()) {
+        if let Ok(addr) = Address::from_str(from) {
+            tx = tx.with_from(addr);
+        }
+    }
+    if let Some(to) = tx_obj.get("to").and_then(|v| v.as_str()) {
+        if let Ok(addr) = Address::from_str(to) {
+            tx = tx.with_to(addr);
+        }
+    }
+    if let Some(data_hex) = tx_obj.get("data").and_then(|v| v.as_str()) {
+        let clean = data_hex.trim_start_matches("0x");
+        if let Ok(bytes) = hex::decode(clean) {
+            tx = tx.with_input(bytes);
+        }
+    }
+    if let Some(gas) = tx_obj.get("gas").and_then(|v| v.as_str()) {
+        if let Ok(g) = u128::from_str_radix(gas.trim_start_matches("0x"), 16) {
+            tx = tx.with_gas_limit(g);
+        }
+    }
+    if let Some(value) = tx_obj.get("value").and_then(|v| v.as_str()) {
+        use alloy::primitives::U256;
+        if let Ok(v) = U256::from_str_radix(value.trim_start_matches("0x"), 16) {
+            tx = tx.with_value(v);
+        }
+    }
+
+    let adapter = state.current_adapter().await?;
+    let result = adapter.call(tx).await?;
+    Ok(serde_json::json!(format!("0x{}", hex::encode(&result))))
 }
 
-async fn handle_estimate_gas(_state: &VaughanState, _params: Vec<Value>) -> Result<Value, WalletError> {
-    // For now, return unsupported (will implement in Phase 3.2)
-    Err(WalletError::UnsupportedMethod("eth_estimateGas".to_string()))
+async fn handle_estimate_gas(state: &VaughanState, params: Vec<Value>) -> Result<Value, WalletError> {
+    // eth_estimateGas: [{ from, to, data, gas, value }]
+    let tx_obj = match params.get(0) {
+        Some(v) if v.is_object() => v.as_object().unwrap(),
+        _ => return Ok(serde_json::json!("0x5208")), // Fallback: 21000 gas
+    };
+
+    use alloy::network::TransactionBuilder;
+    use alloy::primitives::Address;
+    use alloy::rpc::types::TransactionRequest;
+    use std::str::FromStr;
+
+    let mut tx = TransactionRequest::default();
+
+    if let Some(from) = tx_obj.get("from").and_then(|v| v.as_str()) {
+        if let Ok(addr) = Address::from_str(from) {
+            tx = tx.with_from(addr);
+        }
+    }
+    if let Some(to) = tx_obj.get("to").and_then(|v| v.as_str()) {
+        if let Ok(addr) = Address::from_str(to) {
+            tx = tx.with_to(addr);
+        }
+    }
+    if let Some(data_hex) = tx_obj.get("data").and_then(|v| v.as_str()) {
+        let clean = data_hex.trim_start_matches("0x");
+        if let Ok(bytes) = hex::decode(clean) {
+            tx = tx.with_input(bytes);
+        }
+    }
+    if let Some(value) = tx_obj.get("value").and_then(|v| v.as_str()) {
+        use alloy::primitives::U256;
+        if let Ok(v) = U256::from_str_radix(value.trim_start_matches("0x"), 16) {
+            tx = tx.with_value(v);
+        }
+    }
+
+    let adapter = state.current_adapter().await?;
+    let gas = adapter.estimate_gas(tx).await?;
+    Ok(serde_json::json!(format!("0x{:x}", gas)))
 }
 
 async fn handle_gas_price(state: &VaughanState) -> Result<Value, WalletError> {
@@ -262,16 +344,28 @@ async fn handle_get_transaction_by_hash(
     state: &VaughanState,
     params: Vec<Value>,
 ) -> Result<Value, WalletError> {
-    // For now, return unsupported (will implement in Phase 3.2)
-    Err(WalletError::UnsupportedMethod("eth_getTransactionByHash".to_string()))
+    let hash = params
+        .get(0)
+        .and_then(|v| v.as_str())
+        .ok_or(WalletError::InvalidParams)?;
+
+    let adapter = state.current_adapter().await?;
+    let tx = adapter.get_transaction_by_hash(hash).await?;
+    Ok(tx.unwrap_or(serde_json::Value::Null))
 }
 
 async fn handle_get_transaction_receipt(
     state: &VaughanState,
     params: Vec<Value>,
 ) -> Result<Value, WalletError> {
-    // For now, return unsupported (will implement in Phase 3.2)
-    Err(WalletError::UnsupportedMethod("eth_getTransactionReceipt".to_string()))
+    let hash = params
+        .get(0)
+        .and_then(|v| v.as_str())
+        .ok_or(WalletError::InvalidParams)?;
+
+    let adapter = state.current_adapter().await?;
+    let receipt = adapter.get_transaction_receipt(hash).await?;
+    Ok(receipt.unwrap_or(serde_json::Value::Null))
 }
 
 // ============================================================================
@@ -279,6 +373,7 @@ async fn handle_get_transaction_receipt(
 // ============================================================================
 
 async fn handle_send_transaction(
+    app: &AppHandle,
     state: &VaughanState,
     window_label: &str,
     origin: &str,
@@ -362,7 +457,7 @@ async fn handle_send_transaction(
         origin: origin.to_string(),
         from: from.to_string(),
         to: to.to_string(),
-        value: value_eth,
+        value: value_eth.clone(),
         gas_limit: Some(gas_limit_final),
         gas_price: Some(gas_price_u256.to_string()),
         data: data.map(|s| s.to_string()),
@@ -370,6 +465,30 @@ async fn handle_send_transaction(
 
     // Add to approval queue and wait for response (with window_label)
     let (id, rx) = state.approval_queue.add_request(window_label.to_string(), request_type).await?;
+
+    // Emit event to main window to trigger UI
+    if let Some(main_window) = app.get_webview_window("main") {
+        let payload = serde_json::json!({
+            "id": id,
+            "origin": origin,
+            "type": "transaction",
+            "params": {
+                "from": from,
+                "to": to,
+                "value": value_eth,
+                "data": data,
+                "gasLimit": gas_limit_final,
+                "gasPrice": gas_price_u256.to_string()
+            }
+        });
+        
+        eprintln!("[RPC] Emitting dapp_request event to main window: {:?}", payload);
+        if let Err(e) = main_window.emit("dapp_request", payload) {
+            eprintln!("[RPC] Failed to emit dapp_request event: {}", e);
+        }
+    } else {
+        eprintln!("[RPC] WARN: Main window not found - UI will not show approval modal");
+    }
 
     // Wait for user response (with 5 minute timeout)
     let response = tokio::time::timeout(
@@ -447,6 +566,7 @@ async fn handle_send_transaction(
 }
 
 async fn handle_personal_sign(
+    app: &AppHandle,
     state: &VaughanState,
     window_label: &str,
     origin: &str,
@@ -503,14 +623,34 @@ async fn handle_personal_sign(
     let request_type = ApprovalRequestType::PersonalSign {
         origin: origin.to_string(),
         address: format!("{:?}", address),
-        message: message_text,
+        message: message_text.clone(),
     };
 
     // Add approval request
-    let (_id, rx) = state
+    let (id, rx) = state
         .approval_queue
         .add_request(window_label.to_string(), request_type)
         .await?;
+
+    // Emit event to main window to trigger UI
+    if let Some(main_window) = app.get_webview_window("main") {
+        let payload = serde_json::json!({
+            "id": id,
+            "origin": origin,
+            "type": "personal_sign",
+            "params": {
+                "address": address_str,
+                "message": message_text
+            }
+        });
+        
+        eprintln!("[RPC] Emitting dapp_request event to main window: {:?}", payload);
+        if let Err(e) = main_window.emit("dapp_request", payload) {
+            eprintln!("[RPC] Failed to emit dapp_request event: {}", e);
+        }
+    } else {
+        eprintln!("[RPC] WARN: Main window not found - UI will not show approval modal");
+    }
 
     // Wait for user response
     let response = rx
@@ -539,13 +679,94 @@ async fn handle_personal_sign(
 }
 
 async fn handle_sign_typed_data_v4(
+    app: &AppHandle,
     state: &VaughanState,
     window_label: &str,
     origin: &str,
     params: Vec<Value>,
 ) -> Result<Value, WalletError> {
-    // For now, return unsupported (will implement in Phase 3.3)
-    Err(WalletError::UnsupportedMethod("eth_signTypedData_v4".to_string()))
+    // eth_signTypedData_v4 params: [address, typedDataJson]
+    if params.len() < 2 {
+        return Err(WalletError::Custom("eth_signTypedData_v4 requires 2 parameters".to_string()));
+    }
+
+    let address_str = params[0]
+        .as_str()
+        .ok_or_else(|| WalletError::Custom("Address must be a string".to_string()))?;
+
+    let typed_data_raw = &params[1];
+    // typed_data can be a string (JSON-encoded) or an object
+    let typed_data_str = if typed_data_raw.is_string() {
+        typed_data_raw.as_str().unwrap().to_string()
+    } else {
+        typed_data_raw.to_string()
+    };
+
+    // Verify session
+    let session = state
+        .session_manager
+        .get_session_by_window(window_label, origin)
+        .await
+        .ok_or(WalletError::NotConnected)?;
+
+    let address: alloy::primitives::Address = address_str
+        .parse()
+        .map_err(|_| WalletError::InvalidAddress(address_str.to_string()))?;
+
+    if !session.accounts.contains(&address) {
+        return Err(WalletError::PermissionDenied("Address not in session".to_string()));
+    }
+
+    // Create approval request
+    use crate::dapp::ApprovalRequestType;
+    let request_type = ApprovalRequestType::PersonalSign {
+        origin: origin.to_string(),
+        address: format!("{:?}", address),
+        message: format!("TypedData signature request from {}", origin),
+    };
+
+    let (id, rx) = state
+        .approval_queue
+        .add_request(window_label.to_string(), request_type)
+        .await?;
+
+    // Notify main window
+    if let Some(main_window) = app.get_webview_window("main") {
+        let payload = serde_json::json!({
+            "id": id,
+            "origin": origin,
+            "type": "sign_typed_data_v4",
+            "params": {
+                "address": address_str,
+                "typedData": typed_data_str
+            }
+        });
+        let _ = main_window.emit("dapp_request", payload);
+    }
+
+    // Wait for approval
+    let response = rx
+        .await
+        .map_err(|_| WalletError::Custom("Approval cancelled".to_string()))?;
+
+    if !response.approved {
+        return Err(WalletError::UserRejected);
+    }
+
+    let password = response
+        .data
+        .and_then(|d| d.get("password").and_then(|p| p.as_str().map(String::from)))
+        .ok_or_else(|| WalletError::Custom("Password required for signing".to_string()))?;
+
+    // Sign the raw typed data bytes using personal_sign for now
+    // (Full EIP-712 encoding will be added in Phase 3.3)
+    let message_bytes = typed_data_str.as_bytes();
+    let signature = state
+        .wallet_service
+        .sign_message(&address, message_bytes, &password)
+        .await?;
+
+    Ok(serde_json::json!(format!("0x{}", hex::encode(signature))))
 }
 
 // ============================================================================
@@ -554,22 +775,96 @@ async fn handle_sign_typed_data_v4(
 
 async fn handle_switch_chain(
     state: &VaughanState,
-    window_label: &str,
-    origin: &str,
+    _window_label: &str,
+    _origin: &str,
     params: Vec<Value>,
 ) -> Result<Value, WalletError> {
-    // For now, return unsupported (will implement in Phase 3.3)
-    Err(WalletError::UnsupportedMethod("wallet_switchEthereumChain".to_string()))
+    // Parse chainId from params
+    // format: [{ chainId: '0x1' }]
+    let params_obj = params
+        .get(0)
+        .and_then(|v| v.as_object())
+        .ok_or(WalletError::InvalidParams)?;
+    
+    let chain_id_hex = params_obj
+        .get("chainId")
+        .and_then(|v| v.as_str())
+        .ok_or(WalletError::InvalidParams)?;
+    
+    // Parse chain ID
+    let chain_id = if chain_id_hex.starts_with("0x") {
+        u64::from_str_radix(chain_id_hex.trim_start_matches("0x"), 16)
+            .map_err(|_| WalletError::InvalidParams)?
+    } else {
+        u64::from_str_radix(chain_id_hex, 10)
+            .map_err(|_| WalletError::InvalidParams)?
+    };
+
+    eprintln!("[RPC] wallet_switchEthereumChain: Requesting switch to chain {}", chain_id);
+
+    // Verify chain is supported
+    // For now, allow switching to any configured chain
+    // In future, this should prompt user approval if not auto-approved
+    
+    // Check if chain is supported/configured
+    // This is done implicitly by set_active_chain returning error if not found
+    
+    // Switch chain
+    state.set_active_chain(chain_id).await?;
+    
+    eprintln!("[RPC] Successfully switched to chain {}", chain_id);
+    
+    // Return null as per EIP-3326
+    Ok(serde_json::json!(null))
 }
 
 async fn handle_add_chain(
-    _state: &VaughanState,
+    state: &VaughanState,
     _window_label: &str,
     _origin: &str,
-    _params: Vec<Value>,
+    params: Vec<Value>,
 ) -> Result<Value, WalletError> {
-    // For now, return unsupported (will implement in Phase 3.3)
-    Err(WalletError::UnsupportedMethod("wallet_addEthereumChain".to_string()))
+    // wallet_addEthereumChain params: [{ chainId, chainName, rpcUrls, nativeCurrency }]
+    let chain_obj = params
+        .get(0)
+        .and_then(|v| v.as_object())
+        .ok_or(WalletError::InvalidParams)?;
+
+    let chain_id_hex = chain_obj
+        .get("chainId")
+        .and_then(|v| v.as_str())
+        .ok_or(WalletError::InvalidParams)?;
+
+    let chain_id = if chain_id_hex.starts_with("0x") {
+        u64::from_str_radix(chain_id_hex.trim_start_matches("0x"), 16)
+            .map_err(|_| WalletError::InvalidParams)?
+    } else {
+        u64::from_str_radix(chain_id_hex, 10)
+            .map_err(|_| WalletError::InvalidParams)?
+    };
+
+    let rpc_url = chain_obj
+        .get("rpcUrls")
+        .and_then(|v| v.as_array())
+        .and_then(|arr| arr.first())
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| WalletError::Custom("wallet_addEthereumChain: no rpcUrls provided".to_string()))?;
+
+    let network_name = chain_obj
+        .get("chainName")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Custom Network")
+        .to_string();
+
+    eprintln!("[RPC] wallet_addEthereumChain: Adding chain {} ({})", network_name, chain_id);
+
+    // Switch to this network (creates adapter on-demand)
+    state.switch_network(&format!("custom-{}", chain_id), rpc_url, chain_id).await?;
+
+    eprintln!("[RPC] wallet_addEthereumChain: Successfully added chain {}", chain_id);
+
+    // Return null as per EIP-3085
+    Ok(serde_json::json!(null))
 }
 
 // ============================================================================
@@ -667,12 +962,13 @@ async fn handle_get_permissions(
 /// }
 /// ```
 async fn handle_watch_asset(
+    app: &AppHandle,
     state: &VaughanState,
-    window_label: &str,
+    _window_label: &str,
     origin: &str,
     params: Vec<Value>,
 ) -> Result<Value, WalletError> {
-    // Parse parameters
+    // Parse parameters (EIP-747 format)
     let asset_params = params.get(0)
         .ok_or_else(|| WalletError::Custom("Missing asset parameters".to_string()))?;
     
@@ -698,21 +994,64 @@ async fn handle_watch_asset(
     
     let decimals = options.get("decimals")
         .and_then(|v: &Value| v.as_u64())
-        .ok_or_else(|| WalletError::Custom("Missing token decimals".to_string()))?;
+        .ok_or_else(|| WalletError::Custom("Missing token decimals".to_string()))? as u32;
     
     let image = options.get("image")
         .and_then(|v: &Value| v.as_str());
     
-    eprintln!("[RPC] wallet_watchAsset request:");
+    eprintln!("[RPC] wallet_watchAsset request from {}:", origin);
     eprintln!("  Address: {}", address);
     eprintln!("  Symbol: {}", symbol);
     eprintln!("  Decimals: {}", decimals);
     eprintln!("  Image: {:?}", image);
-    eprintln!("  Origin: {}", origin);
+
+    // Emit event to main window so UI can show "Add Token?" prompt
+    if let Some(main_window) = app.get_webview_window("main") {
+        let payload = serde_json::json!({
+            "origin": origin,
+            "type": "watch_asset",
+            "params": {
+                "address": address,
+                "symbol": symbol,
+                "decimals": decimals,
+                "image": image
+            }
+        });
+        
+        eprintln!("[RPC] Emitting dapp_watch_asset event to main window");
+        if let Err(e) = main_window.emit("dapp_watch_asset", payload) {
+            eprintln!("[RPC] Failed to emit dapp_watch_asset event: {}", e);
+        }
+    }
+
+    // Add token to tracked list directly (low-risk operation)
+    let adapter = state.current_adapter().await?;
+    let chain_id = adapter.chain_id();
     
-    // AUTO-APPROVE: wallet_watchAsset is low-risk (just adds token to list)
-    // TODO: Add actual token storage when token management is implemented
-    eprintln!("[RPC] Auto-approving wallet_watchAsset (low-risk operation)");
-    
+    let token = crate::models::token::TrackedToken {
+        address: address.to_string(),
+        symbol: symbol.to_string(),
+        name: symbol.to_string(), // dApps often don't send name, use symbol
+        decimals: decimals as u8,
+        chain_id,
+    };
+
+    let mut tracked_tokens = state.tracked_tokens.lock().await;
+    let chain_tokens = tracked_tokens.entry(chain_id).or_default();
+
+    // Only add if not already tracked
+    if !chain_tokens.iter().any(|t| t.address.eq_ignore_ascii_case(&token.address)) {
+        chain_tokens.push(token);
+        eprintln!("[RPC] Token {} ({}) added to tracked list", symbol, address);
+    } else {
+        eprintln!("[RPC] Token {} already tracked, skipping", symbol);
+    }
+    drop(tracked_tokens);
+
+    // Trigger state persistence
+    if let Ok(account) = state.active_account().await {
+        state.set_active_account(account).await;
+    }
+
     Ok(serde_json::json!(true))
 }

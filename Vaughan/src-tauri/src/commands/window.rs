@@ -483,7 +483,7 @@ pub async fn get_dapp_url(
 #[tauri::command]
 pub async fn open_dapp_browser(
     app: AppHandle,
-    url: Option<String>,
+    _url: Option<String>,
 ) -> Result<(), String> {
     let window_label = format!("dapp-browser-{}", uuid::Uuid::new_v4());
     

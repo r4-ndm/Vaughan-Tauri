@@ -12,7 +12,7 @@
 ///! ## Example
 ///!
 ///! ```rust,no_run
-///! use vaughan::dapp::RateLimiter;
+///! use vaughan_lib::dapp::RateLimiter;
 ///!
 ///! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 ///! let limiter = RateLimiter::default();
@@ -304,7 +304,7 @@ impl RateLimiter {
     /// # Example
     ///
     /// ```rust,no_run
-    /// # use vaughan::dapp::RateLimiter;
+    /// # use vaughan_lib::dapp::RateLimiter;
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let limiter = RateLimiter::new();
     /// limiter.check_limit("https://app.uniswap.org", "eth_sendTransaction").await?;

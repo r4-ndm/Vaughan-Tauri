@@ -9,8 +9,10 @@
 // ============================================================================
 
 use alloy::{
-    primitives::{utils::format_units, Address as AlloyAddress, U256},
+    network::{EthereumWallet, TransactionBuilder},
+    primitives::{utils::format_units, Address as AlloyAddress, Bytes, U256},
     providers::{Provider, ProviderBuilder, RootProvider},
+    rpc::types::TransactionRequest,
     signers::local::PrivateKeySigner,
     transports::http::{Client, Http},
 };
@@ -51,27 +53,29 @@ pub struct EvmAdapter {
     provider: RootProvider<Http<Client>>,
 
     /// Optional signer for transaction signing
-    /// None = read-only adapter (can query but not send)
-    /// Some = full adapter (can query and send transactions)
     signer: Option<PrivateKeySigner>,
 
     /// RPC endpoint URL
     rpc_url: String,
 
-    /// Network identifier (e.g., "ethereum", "pulsechain")
+    /// Network identifier
+    #[allow(dead_code)]
     network_id: String,
 
-    /// Chain ID (e.g., 1 for Ethereum, 369 for PulseChain)
+    /// Chain ID
     chain_id: u64,
 
-    /// Network name (e.g., "Ethereum Mainnet")
+    /// Network name
     network_name: String,
 
-    /// Native token symbol (e.g., "ETH", "PLS")
+    /// Native token symbol
     native_symbol: String,
 
-    /// Native token name (e.g., "Ethereum", "PulseChain")
+    /// Native token name
     native_name: String,
+
+    /// Block explorer API URL (Etherscan-compatible, optional)
+    explorer_api_url: Option<String>,
 }
 
 impl EvmAdapter {
@@ -120,35 +124,45 @@ impl EvmAdapter {
             .parse()
             .map_err(|e| WalletError::NetworkError(format!("Invalid RPC URL: {}", e)))?;
 
-        // Create provider using ProviderBuilder
-        let provider = ProviderBuilder::new().on_http(url);
+        // Create provider using custom rustls client to bypass Windows Schannel NO_REVOCATION bugs
+        let reqwest_client = reqwest::Client::builder()
+            .use_rustls_tls()
+            .build()
+            .map_err(|e| WalletError::NetworkError(format!("Failed to build HTTP client: {}", e)))?;
+
+        // Configure Alloy Provider
+        let transport = alloy::transports::http::Http::with_client(reqwest_client, url);
+        let rpc_client = alloy::rpc::client::RpcClient::new(transport, true);
+        let provider = ProviderBuilder::new().on_client(rpc_client);
 
         // Get network info from predefined networks or use defaults
-        let (network_name, native_symbol, native_name) =
+        let (network_name, native_symbol, native_name, explorer_api_url) =
             if let Some(network_config) = get_network_by_chain_id(chain_id) {
                 (
                     network_config.name,
                     network_config.native_symbol,
                     network_config.native_name,
+                    network_config.explorer_api_url,
                 )
             } else {
-                // Fallback for unknown networks
                 (
                     format!("Chain {}", chain_id),
                     "ETH".to_string(),
                     "Ethereum".to_string(),
+                    None,
                 )
             };
 
         Ok(Self {
             provider,
-            signer: None, // Read-only adapter
+            signer: None,
             rpc_url: rpc_url.to_string(),
             network_id,
             chain_id,
             network_name,
             native_symbol,
             native_name,
+            explorer_api_url,
         })
     }
 
@@ -202,35 +216,45 @@ impl EvmAdapter {
             .parse()
             .map_err(|e| WalletError::NetworkError(format!("Invalid RPC URL: {}", e)))?;
 
-        // Create provider using ProviderBuilder
-        let provider = ProviderBuilder::new().on_http(url);
+        // Create provider using custom rustls client to bypass Windows Schannel NO_REVOCATION bugs
+        let reqwest_client = reqwest::Client::builder()
+            .use_rustls_tls()
+            .build()
+            .map_err(|e| WalletError::NetworkError(format!("Failed to build HTTP client: {}", e)))?;
+
+        // Configure Alloy Provider
+        let transport = alloy::transports::http::Http::with_client(reqwest_client, url);
+        let rpc_client = alloy::rpc::client::RpcClient::new(transport, true);
+        let provider = ProviderBuilder::new().on_client(rpc_client);
 
         // Get network info from predefined networks or use defaults
-        let (network_name, native_symbol, native_name) =
+        let (network_name, native_symbol, native_name, explorer_api_url) =
             if let Some(network_config) = get_network_by_chain_id(chain_id) {
                 (
                     network_config.name,
                     network_config.native_symbol,
                     network_config.native_name,
+                    network_config.explorer_api_url,
                 )
             } else {
-                // Fallback for unknown networks
                 (
                     format!("Chain {}", chain_id),
                     "ETH".to_string(),
                     "Ethereum".to_string(),
+                    None,
                 )
             };
 
         Ok(Self {
             provider,
-            signer: Some(signer), // Full adapter with signer
+            signer: Some(signer),
             rpc_url: rpc_url.to_string(),
             network_id,
             chain_id,
             network_name,
             native_symbol,
             native_name,
+            explorer_api_url,
         })
     }
 
@@ -262,6 +286,136 @@ impl EvmAdapter {
     /// Format wei to human-readable amount
     fn format_wei(&self, wei: U256) -> String {
         format_units(wei, 18).unwrap_or_else(|_| "0".to_string())
+    }
+
+    /// Get transaction history from block explorer API
+    ///
+    /// Uses Etherscan-compatible API to fetch transaction history.
+    /// Returns empty vec if no API URL is configured for this network.
+    ///
+    /// # Arguments
+    ///
+    /// * `address` - Account address
+    /// * `limit` - Max number of transactions to return
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Vec<serde_json::Value>)` - List of transaction objects
+    /// * `Err(WalletError)` - API error
+    pub async fn get_transaction_history(
+        &self,
+        address: &str,
+        limit: u32,
+    ) -> Result<Vec<serde_json::Value>, WalletError> {
+        let api_url = match &self.explorer_api_url {
+            Some(url) => url.clone(),
+            None => {
+                eprintln!("[EvmAdapter] No explorer API URL for chain {}", self.chain_id);
+                return Ok(vec![]);
+            }
+        };
+
+        let url = format!(
+            "{}?module=account&action=txlist&address={}&startblock=0&endblock=99999999&sort=desc&offset={}",
+            api_url, address, limit
+        );
+
+        eprintln!("[EvmAdapter] Fetching tx history from: {}", url);
+
+        let client = reqwest::Client::builder()
+            .use_rustls_tls()
+            .timeout(std::time::Duration::from_secs(15))
+            .build()
+            .map_err(|e| WalletError::NetworkError(format!("HTTP client error: {}", e)))?;
+
+        let resp = client
+            .get(&url)
+            .header("Accept", "application/json")
+            .send()
+            .await
+            .map_err(|e| WalletError::NetworkError(format!("Explorer API request failed: {}", e)))?;
+
+        let json: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| WalletError::NetworkError(format!("Explorer API parse error: {}", e)))?;
+
+        // Etherscan API returns { status: "1", result: [...] } on success
+        // or { status: "0", result: "No transactions found" } when empty
+        let status = json.get("status").and_then(|s| s.as_str()).unwrap_or("0");
+        if status != "1" {
+            eprintln!("[EvmAdapter] Explorer API returned status 0 (no txns or error): {:?}", json.get("message"));
+            return Ok(vec![]);
+        }
+
+        let txns = json
+            .get("result")
+            .and_then(|r| r.as_array())
+            .cloned()
+            .unwrap_or_default();
+
+        eprintln!("[EvmAdapter] Got {} transactions from explorer API", txns.len());
+        Ok(txns)
+    }
+
+    /// Get ERC20 token transfer history from block explorer API
+    ///
+    /// Uses `action=tokentx` on the Etherscan-compatible API.
+    /// Returns empty vec if no API URL is configured for this network.
+    ///
+    /// # Arguments
+    ///
+    /// * `address` - Account address
+    /// * `limit` - Max number of token transfers to return
+    pub async fn get_token_transfer_history(
+        &self,
+        address: &str,
+        limit: u32,
+    ) -> Result<Vec<serde_json::Value>, WalletError> {
+        let api_url = match &self.explorer_api_url {
+            Some(url) => url.clone(),
+            None => return Ok(vec![]),
+        };
+
+        let url = format!(
+            "{}?module=account&action=tokentx&address={}&startblock=0&endblock=99999999&sort=desc&offset={}",
+            api_url, address, limit
+        );
+
+        eprintln!("[EvmAdapter] Fetching token tx history from: {}", url);
+
+        let client = reqwest::Client::builder()
+            .use_rustls_tls()
+            .timeout(std::time::Duration::from_secs(15))
+            .build()
+            .map_err(|e| WalletError::NetworkError(format!("HTTP client error: {}", e)))?;
+
+        let resp = client
+            .get(&url)
+            .header("Accept", "application/json")
+            .send()
+            .await
+            .map_err(|e| WalletError::NetworkError(format!("Explorer token API failed: {}", e)))?;
+
+        let json: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| WalletError::NetworkError(format!("Explorer token API parse error: {}", e)))?;
+
+        let status = json.get("status").and_then(|s| s.as_str()).unwrap_or("0");
+        if status != "1" {
+            eprintln!("[EvmAdapter] Token tx API returned status 0: {:?}", json.get("message"));
+            return Ok(vec![]);
+        }
+
+        let txns = json
+            .get("result")
+            .and_then(|r| r.as_array())
+            .cloned()
+            .unwrap_or_default();
+
+        eprintln!("[EvmAdapter] Got {} token transfers from explorer API", txns.len());
+        Ok(txns)
     }
 }
 
@@ -302,7 +456,7 @@ impl ChainAdapter for EvmAdapter {
 
     async fn send_transaction(&self, tx: ChainTransaction) -> Result<TxHash, WalletError> {
         // Extract EVM transaction
-        let _evm_tx = match tx {
+        let evm_tx = match tx {
             ChainTransaction::Evm(tx) => tx,
             _ => {
                 return Err(WalletError::InvalidTransaction(
@@ -311,20 +465,98 @@ impl ChainAdapter for EvmAdapter {
             },
         };
 
-        // Check if signer exists
-        let _signer = self.signer.as_ref().ok_or_else(|| {
+        // Check if signer exists (clone needed — ProviderBuilder::wallet takes ownership)
+        let signer = self.signer.as_ref().ok_or_else(|| {
             WalletError::SignerNotAvailable(
                 "Cannot send transaction: adapter has no signer (use new_with_signer)".to_string(),
             )
+        })?.clone();
+
+        // Parse recipient address
+        let to_addr: AlloyAddress = evm_tx.to.parse().map_err(|e| {
+            WalletError::InvalidAddress(format!("Invalid 'to' address: {}", e))
         })?;
 
-        // TODO: Implement transaction sending with Alloy
-        // This requires resolving Alloy's type inference issues with ProviderBuilder + wallet
-        // For now, return a clear error message
-        // Will be implemented in wallet integration phase when we have better context
-        Err(WalletError::InternalError(
-            "Transaction sending with signer not yet fully implemented (Alloy type inference issues)".to_string()
-        ))
+        // Parse value (wei)
+        let value = U256::from_str_radix(&evm_tx.value, 10).unwrap_or_else(|_| {
+            // Try hex parsing as fallback
+            evm_tx.value.parse::<U256>().unwrap_or(U256::ZERO)
+        });
+
+        // Build Alloy TransactionRequest from our EvmTransaction
+        let mut tx_request = TransactionRequest::default()
+            .with_to(to_addr)
+            .with_value(value)
+            .with_chain_id(evm_tx.chain_id);
+
+        // Set gas limit if provided
+        if let Some(gas_limit) = evm_tx.gas_limit {
+            tx_request = tx_request.with_gas_limit(gas_limit as u128);
+        }
+
+        // Set gas price (legacy) if provided
+        if let Some(ref gas_price_str) = evm_tx.gas_price {
+            if let Ok(gas_price) = gas_price_str.parse::<u128>() {
+                tx_request = tx_request.with_gas_price(gas_price);
+            }
+        }
+
+        // Set EIP-1559 fields if provided
+        if let Some(ref max_fee) = evm_tx.max_fee_per_gas {
+            if let Ok(max_fee_val) = max_fee.parse::<u128>() {
+                tx_request = tx_request.with_max_fee_per_gas(max_fee_val);
+            }
+        }
+        if let Some(ref max_priority_fee) = evm_tx.max_priority_fee_per_gas {
+            if let Ok(max_priority_val) = max_priority_fee.parse::<u128>() {
+                tx_request = tx_request.with_max_priority_fee_per_gas(max_priority_val);
+            }
+        }
+
+        // Set nonce if provided
+        if let Some(nonce) = evm_tx.nonce {
+            tx_request = tx_request.with_nonce(nonce);
+        }
+
+        // Set data if provided (for contract calls)
+        if let Some(ref data_hex) = evm_tx.data {
+            let data_str = data_hex.strip_prefix("0x").unwrap_or(data_hex);
+            if let Ok(data_bytes) = hex::decode(data_str) {
+                tx_request = tx_request.with_input(Bytes::from(data_bytes));
+            }
+        }
+
+        // Construct a signing provider on-demand using the stored signer and RPC URL.
+        // This is the correct Alloy pattern: ProviderBuilder::new().wallet(wallet).on_client(...)
+        let wallet = EthereumWallet::from(signer);
+        let rpc_url = self.rpc_url.parse().map_err(|e| {
+            WalletError::NetworkError(format!("Invalid RPC URL for signing provider: {}", e))
+        })?;
+        
+        // Create custom rustls client to bypass Windows Schannel NO_REVOCATION bugs
+        let reqwest_client_sign = reqwest::Client::builder()
+            .use_rustls_tls()
+            .build()
+            .map_err(|e| WalletError::NetworkError(format!("Failed to build HTTP client for signing: {}", e)))?;
+            
+        let signing_transport = alloy::transports::http::Http::with_client(reqwest_client_sign, rpc_url);
+        let signing_rpc_client = alloy::rpc::client::RpcClient::new(signing_transport, true);
+        
+        let signing_provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .on_client(signing_rpc_client);
+
+        // Send the transaction and get the pending transaction handle
+        let pending_tx = signing_provider
+            .send_transaction(tx_request)
+            .await
+            .map_err(|e| {
+                WalletError::TransactionFailed(format!("Failed to send transaction: {}", e))
+            })?;
+
+        // Return the transaction hash
+        let hash = pending_tx.tx_hash();
+        Ok(TxHash(format!("{:?}", hash)))
     }
 
     async fn sign_message(&self, address: &str, message: &[u8]) -> Result<Signature, WalletError> {
@@ -474,6 +706,7 @@ impl EvmAdapter {
     pub async fn get_transaction_count(&self, address: AlloyAddress) -> Result<u64, WalletError> {
         self.provider
             .get_transaction_count(address)
+            .pending()
             .await
             .map_err(WalletError::from)
     }
@@ -489,6 +722,98 @@ impl EvmAdapter {
             .get_block_number()
             .await
             .map_err(WalletError::from)
+    }
+
+    /// Call a smart contract function (read-only, no gas cost)
+    ///
+    /// This is a raw passthrough to the underlying RPC `eth_call`.
+    ///
+    /// # Arguments
+    ///
+    /// * `tx` - Transaction request (from/to/data)
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Bytes)` - Return data from the contract call
+    /// * `Err(WalletError)` - Call reverted or failed
+    pub async fn call(&self, tx: TransactionRequest) -> Result<Bytes, WalletError> {
+        self.provider
+            .call(&tx)
+            .await
+            .map_err(|e| WalletError::Custom(format!("eth_call failed: {}", e)))
+    }
+
+    /// Estimate gas for a transaction
+    ///
+    /// # Arguments
+    ///
+    /// * `tx` - Transaction request
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(u128)` - Estimated gas limit
+    /// * `Err(WalletError)` - Estimation failed
+    pub async fn estimate_gas(&self, tx: TransactionRequest) -> Result<u128, WalletError> {
+        self.provider
+            .estimate_gas(&tx)
+            .await
+            .map_err(|e| WalletError::Custom(format!("eth_estimateGas failed: {}", e)))
+    }
+
+    /// Get transaction by hash
+    ///
+    /// # Arguments
+    ///
+    /// * `hash` - Transaction hash (hex string with 0x prefix)
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Option<serde_json::Value>)` - Transaction or None if not found
+    /// * `Err(WalletError)` - RPC error
+    pub async fn get_transaction_by_hash(
+        &self,
+        hash: &str,
+    ) -> Result<Option<serde_json::Value>, WalletError> {
+        use alloy::primitives::TxHash;
+        let tx_hash: TxHash = hash
+            .parse()
+            .map_err(|_| WalletError::Custom(format!("Invalid transaction hash: {}", hash)))?;
+
+        let tx = self
+            .provider
+            .get_transaction_by_hash(tx_hash)
+            .await
+            .map_err(|e| WalletError::Custom(format!("eth_getTransactionByHash failed: {}", e)))?;
+
+        Ok(tx.map(|t| serde_json::to_value(t).unwrap_or(serde_json::Value::Null)))
+    }
+
+    /// Get transaction receipt by hash
+    ///
+    /// # Arguments
+    ///
+    /// * `hash` - Transaction hash (hex string with 0x prefix)
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Option<serde_json::Value>)` - Receipt or None if pending
+    /// * `Err(WalletError)` - RPC error
+    pub async fn get_transaction_receipt(
+        &self,
+        hash: &str,
+    ) -> Result<Option<serde_json::Value>, WalletError> {
+        use alloy::primitives::TxHash;
+        let tx_hash: TxHash = hash
+            .parse()
+            .map_err(|_| WalletError::Custom(format!("Invalid transaction hash: {}", hash)))?;
+
+        let receipt = self
+            .provider
+            .get_transaction_receipt(tx_hash)
+            .await
+            .map_err(|e| WalletError::Custom(format!("eth_getTransactionReceipt failed: {}", e)))?;
+
+        Ok(receipt.map(|r| serde_json::to_value(r).unwrap_or(serde_json::Value::Null)))
     }
 
     /// Get chain ID

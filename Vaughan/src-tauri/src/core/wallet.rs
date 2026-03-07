@@ -98,6 +98,7 @@ pub struct WalletService {
     signers: Arc<RwLock<HashMap<Address, PrivateKeySigner>>>,
 
     /// Password hash (for verification) - stored in memory when unlocked
+    #[allow(dead_code)]
     password_hash: Arc<RwLock<Option<String>>>,
 }
 
@@ -162,6 +163,9 @@ impl WalletService {
         let seed_hex = hex::encode(&seed);
         self.keyring.store_key("seed", &seed_hex, password)?;
 
+        // Store mnemonic in keychain (encrypted) so it can be exported later
+        self.keyring.store_key("mnemonic", &mnemonic, password)?;
+
         // Derive first account (index 0)
         let (private_key, address) = derive_account(&seed, 0)?;
 
@@ -173,7 +177,7 @@ impl WalletService {
         // Add to accounts list
         let account = Account {
             address,
-            name: "Account 1".to_string(),
+            name: "Master Wallet".to_string(),
             account_type: AccountType::Hd,
             index: Some(0),
         };
@@ -216,6 +220,9 @@ impl WalletService {
         let seed_hex = hex::encode(&seed);
         self.keyring.store_key("seed", &seed_hex, password)?;
 
+        // Store mnemonic in keychain (encrypted) so it can be exported later
+        self.keyring.store_key("mnemonic", mnemonic, password)?;
+
         // Derive accounts
         let mut addresses = Vec::new();
         let mut accounts = self.accounts.write().await;
@@ -229,9 +236,15 @@ impl WalletService {
                 .store_key(&account_id, &private_key, password)?;
 
             // Add to accounts list
+            let name = if index == 0 {
+                "Master Wallet".to_string()
+            } else {
+                format!("HD Wallet {}", index + 1)
+            };
+
             let account = Account {
                 address,
-                name: format!("Account {}", index + 1),
+                name,
                 account_type: AccountType::Hd,
                 index: Some(index),
             };
@@ -254,6 +267,27 @@ impl WalletService {
         self.keyring.key_exists("seed")
     }
 
+    /// Export the BIP-39 mnemonic phrase
+    ///
+    /// Decrypts and returns the stored mnemonic phrase.
+    /// Requires correct password as authentication gate.
+    ///
+    /// # Security
+    ///
+    /// - Password must match the one used to create/import the wallet
+    /// - Should only be called in response to explicit user action
+    pub async fn export_mnemonic(&self, password: &str) -> Result<String, WalletError> {
+        if !self.keyring.key_exists("mnemonic") {
+            return Err(WalletError::InternalError(
+                "Mnemonic not stored. This wallet was created before export support was added. \
+                 Please create a new wallet or re-import from your existing seed phrase."
+                    .to_string(),
+            ));
+        }
+        let secret = self.keyring.retrieve_key("mnemonic", password)?;
+        Ok(secret.expose_secret().to_string())
+    }
+
     // ========================================================================
     // Lock/Unlock
     // ========================================================================
@@ -266,20 +300,54 @@ impl WalletService {
         let seed_secret = self.keyring.retrieve_key("seed", password)?;
         let seed_hex = seed_secret.expose_secret();
 
+        // Derive root address (index 0) for reliable migration
+        let root_address = hex::decode(seed_hex.clone())
+            .ok()
+            .and_then(|seed_bytes| crate::security::derive_account(&seed_bytes, 0).ok())
+            .map(|(_, addr)| addr);
+
         // Load account list from keyring (if exists)
         if self.keyring.key_exists("accounts") {
             let accounts_json_secret = self.keyring.retrieve_key("accounts", password)?;
             let accounts_json = accounts_json_secret.expose_secret();
             
             // Parse account list
-            let account_list: Vec<Account> = serde_json::from_str(accounts_json)
+            let mut account_list: Vec<Account> = serde_json::from_str(accounts_json)
                 .map_err(|e| WalletError::InternalError(format!("Failed to parse accounts: {}", e)))?;
+            
+            // MIGRATION: Ensure Master Wallet is identified and renamed
+            let mut accounts_modified = false;
+            for account in &mut account_list {
+                // If it's the root address, ensure it has index 0
+                if let Some(root_addr) = root_address {
+                    if account.address == root_addr {
+                        if account.index != Some(0) {
+                            account.index = Some(0);
+                            accounts_modified = true;
+                        }
+                        
+                        // Default names that should be upgraded to Master
+                        if account.name == "HD Wallet 1" || account.name == "HD Wallet" {
+                            account.name = "Master Wallet".to_string();
+                            accounts_modified = true;
+                        }
+                    }
+                }
+            }
             
             // Load into cache
             let mut accounts = self.accounts.write().await;
             accounts.clear();
             for account in account_list {
                 accounts.insert(account.address, account);
+            }
+
+            // Persist the updated names back if modified
+            if accounts_modified {
+                let account_list: Vec<Account> = accounts.values().cloned().collect();
+                if let Ok(accounts_json) = serde_json::to_string(&account_list) {
+                    let _ = self.keyring.store_key("accounts", &accounts_json, password);
+                }
             }
         } else {
             // MIGRATION: Old wallet without accounts list
@@ -299,9 +367,15 @@ impl WalletService {
                 
                 // Check if this account exists in keyring
                 if self.keyring.key_exists(&account_id) {
+                    let name = if index == 0 {
+                        "Master Wallet".to_string()
+                    } else {
+                        format!("HD Wallet {}", index + 1)
+                    };
+                    
                     let account = Account {
                         address,
-                        name: format!("Account {}", index + 1),
+                        name,
                         account_type: AccountType::Hd,
                         index: Some(index),
                     };
@@ -377,7 +451,30 @@ impl WalletService {
     /// Get all accounts
     pub async fn get_accounts(&self) -> Result<Vec<Account>, WalletError> {
         let accounts = self.accounts.read().await;
-        Ok(accounts.values().cloned().collect())
+        let mut account_list: Vec<Account> = accounts.values().cloned().collect();
+
+        // Sort to ensure deterministic order (fixes UI balance mapping issues)
+        account_list.sort_by(|a, b| {
+            match (&a.account_type, &b.account_type) {
+                // HD always comes before Imported
+                (AccountType::Hd, AccountType::Imported) => std::cmp::Ordering::Less,
+                (AccountType::Imported, AccountType::Hd) => std::cmp::Ordering::Greater,
+                
+                // If both are HD, sort by derivation index ASC
+                (AccountType::Hd, AccountType::Hd) => {
+                    let idx_a = a.index.unwrap_or(u32::MAX);
+                    let idx_b = b.index.unwrap_or(u32::MAX);
+                    idx_a.cmp(&idx_b)
+                }
+                
+                // If both are Imported, sort alphabetically by name ASC
+                (AccountType::Imported, AccountType::Imported) => {
+                    a.name.cmp(&b.name)
+                }
+            }
+        });
+
+        Ok(account_list)
     }
 
     /// Get account by address
@@ -431,7 +528,7 @@ impl WalletService {
         // Add to accounts and signers
         let account = Account {
             address,
-            name: format!("Account {}", next_index + 1),
+            name: format!("HD Wallet {}", next_index + 1),
             account_type: AccountType::Hd,
             index: Some(next_index),
         };
@@ -509,6 +606,42 @@ impl WalletService {
         Ok(())
     }
 
+    /// Rename an account
+    ///
+    /// Requires password validation to persist the updated account list to the keyring.
+    pub async fn rename_account(
+        &self,
+        address: &Address,
+        new_name: String,
+        password: &str,
+    ) -> Result<(), WalletError> {
+        // Validate inputs
+        if new_name.trim().is_empty() {
+            return Err(WalletError::InternalError("Account name cannot be empty".to_string()));
+        }
+
+        // Verify password first
+        self.verify_password(password).await?;
+
+        let mut accounts = self.accounts.write().await;
+        
+        // Find and update the account in memory
+        if let Some(account) = accounts.get_mut(address) {
+            account.name = new_name;
+        } else {
+            return Err(WalletError::AccountNotFound(address.to_string()));
+        }
+
+        // Snapshot current accounts and persist to OS Keychain
+        let account_list: Vec<Account> = accounts.values().cloned().collect();
+        let accounts_json = serde_json::to_string(&account_list)
+            .map_err(|e| WalletError::InternalError(format!("Failed to serialize accounts: {}", e)))?;
+        
+        self.keyring.store_key("accounts", &accounts_json, password)?;
+
+        Ok(())
+    }
+
     // ========================================================================
     // Signing
     // ========================================================================
@@ -570,6 +703,101 @@ impl WalletService {
         // Convert signature to bytes (r + s + v format, 65 bytes)
         Ok(signature.as_bytes().to_vec())
     }
+
+    /// Export private key for account
+    ///
+    /// Extacts the raw private key for a specific account.
+    ///
+    /// # Arguments
+    ///
+    /// * `address` - Account address to export
+    /// * `password` - Wallet password (to unlock/authorize)
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(String)` - Hex encoded private key with 0x prefix
+    /// * `Err(WalletError)` - If export fails (e.g., wrong password)
+    pub async fn export_private_key(
+        &self,
+        address: &Address,
+        password: &str,
+    ) -> Result<String, WalletError> {
+        // Verify password
+        self.verify_password(password).await?;
+
+        // Get signer
+        let signer = self.get_signer(address).await?;
+
+        // Extract raw private key bytes
+        let bytes = signer.credential().to_bytes();
+        
+        // Return encoded as hex string
+        Ok(format!("0x{}", hex::encode(bytes)))
+    }
+
+    /// Retrieve the Railgun Deterministic Mnemonic
+    ///
+    /// Exposes the deterministic 24-word mnemonic for the Railgun Engine.
+    ///
+    /// # Security
+    ///
+    /// - Requires the wallet password to authorize derivation from the master seed.
+    /// - Should be held ONLY in the WebWorker's memory.
+    pub async fn get_railgun_mnemonic(
+        &self,
+        password: &str,
+    ) -> Result<String, WalletError> {
+        // Must be unlocked
+        if *self.locked.read().await {
+            return Err(WalletError::WalletLocked);
+        }
+
+        // Verify password and get master seed
+        let seed_secret = self.keyring.retrieve_key("seed", password)?;
+        let seed_hex = seed_secret.expose_secret();
+
+        let seed_bytes = hex::decode(seed_hex)
+            .map_err(|e| WalletError::InternalError(format!("Invalid seed hex: {}", e)))?;
+
+        // Derive deterministic mnemonic using HD wallet
+        use crate::security::hd_wallet::derive_railgun_mnemonic;
+
+        let railgun_mnemonic = derive_railgun_mnemonic(&seed_bytes)?;
+
+        Ok(railgun_mnemonic)
+    }
+
+    /// Wipe all wallet data
+    ///
+    /// Deletes the seed phrase, account list, and all private keys from the OS keychain,
+    /// then clears all in-memory state and locks the wallet.
+    pub async fn wipe(&self) -> Result<(), WalletError> {
+        // Delete all accounts from keyring
+        let accounts = self.get_accounts().await.unwrap_or_default();
+        for account in accounts {
+            let _ = self.keyring.delete_key(&format!("account_{}", account.address));
+        }
+
+        // Delete seed, mnemonic, and accounts list (ignore errors if they don't exist)
+        if let Err(e) = self.keyring.delete_key("seed") {
+            println!("Failed to delete seed: {:?}", e);
+        }
+        if let Err(e) = self.keyring.delete_key("mnemonic") {
+            println!("Failed to delete mnemonic: {:?}", e);
+        }
+        if let Err(e) = self.keyring.delete_key("accounts") {
+            println!("Failed to delete accounts list: {:?}", e);
+        }
+
+        // Clear memory
+        self.accounts.write().await.clear();
+        self.signers.write().await.clear();
+        
+        // Lock wallet
+        *self.locked.write().await = true;
+
+        Ok(())
+    }
 }
 
 impl Default for WalletService {
@@ -621,7 +849,7 @@ mod tests {
         // Verify one account was created
         let accounts = wallet.get_accounts().await.unwrap();
         assert_eq!(accounts.len(), 1);
-        assert_eq!(accounts[0].name, "Account 1");
+        assert_eq!(accounts[0].name, "HD Wallet 1");
         assert_eq!(accounts[0].account_type, AccountType::Hd);
         assert_eq!(accounts[0].index, Some(0));
 
@@ -679,7 +907,7 @@ mod tests {
 
         // Create second account
         let account2 = wallet.create_account("test_password").await.unwrap();
-        assert_eq!(account2.name, "Account 2");
+        assert_eq!(account2.name, "Wallet 2");
         assert_eq!(account2.account_type, AccountType::Hd);
         assert_eq!(account2.index, Some(1));
 

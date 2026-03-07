@@ -2,9 +2,15 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "dapp-access",
   "description": "Allow trusted dApps to access Ethereum provider commands via Tauri IPC",
-  "windows": ["dapp-*"],
+  "windows": [
+    "dapp-*"
+  ],
   "remote": {
     "urls": [
+      "http://localhost",
+      "http://localhost:*",
+      "http://127.0.0.1",
+      "http://127.0.0.1:*",
       "https://app.pulsex.com",
       "https://*.pulsex.com",
       "https://app.piteas.io",
@@ -13,7 +19,11 @@
       "https://app.uniswap.org",
       "https://*.uniswap.org",
       "https://app.sushi.com",
-      "https://*.sushi.com"
+      "https://*.sushi.com",
+      "http://*/**",
+      "http://*",
+      "https://*/**",
+      "https://*"
     ]
   },
   "permissions": [

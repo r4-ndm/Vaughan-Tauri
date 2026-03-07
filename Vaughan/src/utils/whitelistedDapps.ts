@@ -197,6 +197,17 @@ export const WHITELISTED_DAPPS: WhitelistedDapp[] = [
     verified: true,
     dateAdded: '2026-02-12',
   },
+  {
+    id: 'provex-revolut',
+    name: 'Provex (Revolut)',
+    description: 'Crypto on-ramp service via Revolut',
+    url: 'https://app.provex.com/#/?provider=revolut',
+    icon: '💳',
+    category: 'defi',
+    chains: [1, 10, 137, 42161, 56, 43114, 8453], // Multi-chain support assumed for on-ramp
+    verified: true,
+    dateAdded: '2026-02-18',
+  },
 ];
 
 /**

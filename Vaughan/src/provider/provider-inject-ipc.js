@@ -16,7 +16,7 @@
  * - Same pattern used by browser extensions (MetaMask, etc.)
  */
 
-(async function() {
+(async function () {
   'use strict';
 
   console.log('[Vaughan-IPC] Initializing Tauri IPC bridge...');
@@ -45,15 +45,20 @@
 
     // Use injected window label (set by initialization_script before page loads)
     // Fallback to Tauri metadata, then 'unknown'
-    const windowLabel = window.__VAUGHAN_WINDOW_LABEL__ 
-      || window.__TAURI_METADATA__?.currentWindow?.label 
+    const windowLabel = window.__VAUGHAN_WINDOW_LABEL__
+      || window.__TAURI_METADATA__?.currentWindow?.label
       || 'unknown';
-    
+
     const origin = window.__VAUGHAN_ORIGIN__ || window.location.origin;
 
     console.log('[Vaughan-IPC] RPC Request:', method, params);
     console.log('[Vaughan-IPC] Window Label:', windowLabel);
     console.log('[Vaughan-IPC] Origin:', origin);
+
+    // Normalize params to always be an array
+    // Some methods (e.g. wallet_watchAsset) send params as an object,
+    // but the Rust backend expects Vec<Value> (array)
+    const normalizedParams = !params ? [] : Array.isArray(params) ? params : [params];
 
     try {
       // Call Tauri backend
@@ -61,7 +66,7 @@
         windowLabel: windowLabel,
         origin: origin,
         method,
-        params: params || []
+        params: normalizedParams
       });
 
       // Send response back to page
@@ -88,22 +93,24 @@
   });
 
   // Listen for events from Tauri backend
-  try {
-    await listen('wallet_event', (event) => {
-      console.log('[Vaughan-IPC] Wallet Event:', event.payload);
+  // In Tauri V2, event.listen returns a Promise that resolves to an unlisten function.
+  // We don't await it here at the top level to avoid blocking provider injection,
+  // but we handle the promise correctly.
+  listen('wallet_event', (event) => {
+    console.log('[Vaughan-IPC] Wallet Event:', event.payload);
 
-      // Forward to page context
-      window.postMessage({
-        type: 'VAUGHAN_WALLET_EVENT',
-        event: event.payload.event,
-        data: event.payload.data
-      }, '*');
-    });
-
-    console.log('[Vaughan-IPC] Event listener registered');
-  } catch (error) {
-    console.error('[Vaughan-IPC] Failed to register event listener:', error);
-  }
+    // Forward to page context
+    window.postMessage({
+      type: 'VAUGHAN_WALLET_EVENT',
+      event: event.payload.event,
+      data: event.payload.data
+    }, '*');
+  }).then((unlisten) => {
+    console.log('[Vaughan-IPC] Event listener registered successfully');
+    window.__VAUGHAN_UNLISTEN__ = unlisten;
+  }).catch((error) => {
+    console.error('[Vaughan-IPC] Failed to register event listener. Tauri APIs might be restricted:', error);
+  });
 
   // ============================================================================
   // Inject Provider into Page Context (Direct injection, no script tag)
@@ -288,6 +295,9 @@
       // Generate request ID
       const id = ++this._requestId;
 
+      // Handle custom local logic before forwarding to IPC if needed
+      // but standard EIP-1193 delegates eth_requestAccounts upstream to the wallet!
+
       // Send request via postMessage
       return new Promise((resolve, reject) => {
         // Store pending request
@@ -301,13 +311,13 @@
           params
         }, '*');
 
-        // Timeout after 30 seconds
+        // Timeout after 60 seconds (approvals can take time!)
         setTimeout(() => {
           if (this._pendingRequests.has(id)) {
             this._pendingRequests.delete(id);
-            reject(new Error('Request timeout'));
+            reject(new Error('Request timeout - user ignored or wallet busy'));
           }
-        }, 30000);
+        }, 60000);
       });
     }
 

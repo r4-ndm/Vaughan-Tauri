@@ -101,6 +101,9 @@ pub enum WalletError {
     /// Invalid network configuration
     InvalidNetwork(String),
 
+    /// Unsupported network/chain
+    UnsupportedNetwork(String),
+
     /// Network not initialized
     NetworkNotInitialized,
 
@@ -202,6 +205,7 @@ impl fmt::Display for WalletError {
             Self::ChainNotSupported(chain) => write!(f, "Chain not supported: {}", chain),
             Self::AdapterNotFound(chain) => write!(f, "Adapter not found for chain: {}", chain),
             Self::InvalidNetwork(msg) => write!(f, "Invalid network: {}", msg),
+            Self::UnsupportedNetwork(msg) => write!(f, "Unsupported network: {}", msg),
             Self::NetworkNotInitialized => write!(f, "Network not initialized"),
             Self::NoActiveAccount => write!(f, "No active account selected"),
 
@@ -275,6 +279,9 @@ impl WalletError {
             Self::InvalidNetwork(msg) => {
                 format!("Invalid network configuration: {}", msg)
             },
+            Self::UnsupportedNetwork(msg) => {
+                format!("Unsupported network: {}", msg)
+            },
             Self::NetworkNotInitialized => {
                 "Network not initialized. Please select a network first.".to_string()
             },
@@ -342,6 +349,7 @@ impl WalletError {
             Self::ChainNotSupported(_) => "CHAIN_NOT_SUPPORTED",
             Self::AdapterNotFound(_) => "ADAPTER_NOT_FOUND",
             Self::InvalidNetwork(_) => "INVALID_NETWORK",
+            Self::UnsupportedNetwork(_) => "UNSUPPORTED_NETWORK",
             Self::NetworkNotInitialized => "NETWORK_NOT_INITIALIZED",
             Self::NoActiveAccount => "NO_ACTIVE_ACCOUNT",
             Self::DappNotConnected(_) => "DAPP_NOT_CONNECTED",

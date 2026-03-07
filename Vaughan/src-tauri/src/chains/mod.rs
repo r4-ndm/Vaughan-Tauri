@@ -22,6 +22,9 @@ pub use types::{
     TxHash, TxRecord, TxStatus,
 };
 
+/// Network identifier type (e.g. "ethereum-mainnet")
+pub type NetworkId = String;
+
 // ============================================================================
 // ChainAdapter Trait
 // ============================================================================

@@ -4,18 +4,17 @@
   "version": "0.1.0",
   "identifier": "513.vaughan",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "npm run dev --prefix web",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
-    "frontendDist": "../dist"
+    "beforeBuildCommand": "npm run build --prefix web",
+    "frontendDist": "../web/dist"
   },
   "app": {
     "windows": [
       {
         "title": "vaughan",
-        "width": 800,
-        "height": 600,
-        "devtools": true
+        "devtools": true,
+        "visible": false
       }
     ],
     "security": {

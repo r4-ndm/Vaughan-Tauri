@@ -220,7 +220,11 @@ pub async fn get_network_info(
         name: chain_info.name,
         chain_id: chain_info.chain_id.unwrap_or(0),
         rpc_url: adapter.rpc_url().to_string(),
-        explorer_url: String::new(), // TODO: Add explorer URL to chain info
+        explorer_url: crate::chains::evm::networks::get_network_by_chain_id(
+            chain_info.chain_id.unwrap_or(0)
+        )
+        .and_then(|n| n.explorer_url)
+        .unwrap_or_default(),
         native_token: TokenInfoResponse {
             symbol: chain_info.native_token.symbol,
             name: chain_info.native_token.name,
@@ -284,6 +288,32 @@ pub async fn get_block_number(state: State<'_, VaughanState>) -> Result<u64, Str
         .get_block_number()
         .await
         .map_err(|e| format!("Failed to get block number: {}", e))
+}
+
+/// Get supported networks
+///
+/// Returns a list of all supported network configurations.
+///
+/// # Arguments
+///
+/// * `state` - Application state
+///
+/// # Returns
+///
+/// * `Ok(Vec<NetworkConfig>)` - List of supported networks
+/// * `Err(String)` - Error message
+///
+/// # Example (from frontend)
+///
+/// ```typescript
+/// const networks = await invoke('get_supported_networks');
+/// console.log(`Supported networks: ${networks.length}`);
+/// ```
+#[tauri::command]
+pub async fn get_supported_networks(
+    state: State<'_, VaughanState>,
+) -> Result<Vec<crate::core::NetworkConfig>, String> {
+    Ok(state.network_service.get_predefined_networks())
 }
 
 // ============================================================================

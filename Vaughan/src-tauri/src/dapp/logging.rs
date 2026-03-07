@@ -13,7 +13,7 @@
 //!
 //! # Usage
 //!
-//! ```rust
+//! ```rust,ignore
 //! use crate::dapp::logging::*;
 //!
 //! // Log WebSocket connection

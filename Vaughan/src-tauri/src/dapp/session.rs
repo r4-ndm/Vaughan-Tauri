@@ -389,6 +389,30 @@ impl SessionManager {
         eprintln!("[SessionManager] Auto-approved session created. Total sessions: {}", sessions.len());
         Ok(())
     }
+
+    /// Update accounts for all active sessions
+    ///
+    /// Useful when the global active account changes and we want to 
+    /// explicitly switch the authorized accounts for connected dApps.
+    ///
+    /// # Arguments
+    ///
+    /// * `accounts` - The new authorized accounts list
+    pub async fn update_all_sessions_accounts(&self, accounts: Vec<Address>) {
+        let mut sessions = self.sessions.write().await;
+        
+        eprintln!("[SessionManager] Updating accounts for all {} active sessions", sessions.len());
+        
+        for (_, session) in sessions.iter_mut() {
+            session.accounts = accounts.clone();
+            
+            // Also bump activity to keep them alive
+            session.last_activity = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+        }
+    }
 }
 
 impl Default for SessionManager {
@@ -669,5 +693,32 @@ mod tests {
         // Check auto-approved session
         let auto = manager.get_session_by_window("window-2", origin).await.unwrap();
         assert_eq!(auto.auto_approved, true);
+    }
+
+    #[tokio::test]
+    async fn test_update_all_sessions_accounts() {
+        let manager = SessionManager::new();
+        let old_accounts = vec![Address::ZERO];
+        let new_accounts = vec![Address::repeat_byte(0x11)];
+
+        // Create multiple sessions with old accounts
+        manager
+            .create_session_for_window("window-1", "https://app.uniswap.org", None, None, old_accounts.clone())
+            .await
+            .unwrap();
+        manager
+            .create_session_for_window("window-2", "https://app.aave.com", None, None, old_accounts.clone())
+            .await
+            .unwrap();
+
+        // Update all sessions to new accounts
+        manager.update_all_sessions_accounts(new_accounts.clone()).await;
+
+        // Verify both sessions were updated
+        let session1 = manager.get_session_by_window("window-1", "https://app.uniswap.org").await.unwrap();
+        assert_eq!(session1.accounts, new_accounts);
+
+        let session2 = manager.get_session_by_window("window-2", "https://app.aave.com").await.unwrap();
+        assert_eq!(session2.accounts, new_accounts);
     }
 }

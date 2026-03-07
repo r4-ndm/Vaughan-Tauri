@@ -8,7 +8,6 @@ import {
   SendView,
   ReceiveView,
   DappBrowserView,
-  DappBrowserHybrid,
   DappBrowserDirect,
   DappBrowserSimple,
 } from './views';
@@ -41,10 +40,9 @@ function App() {
       <Route path="/wallet" element={<WalletView />} />
       <Route path="/send" element={<SendView />} />
       <Route path="/receive" element={<ReceiveView />} />
-      
+
       {/* dApp Browser */}
       <Route path="/dapp" element={<DappBrowserView />} />
-      <Route path="/dapp-hybrid" element={<DappBrowserHybrid />} />
       <Route path="/dapp-direct" element={<DappBrowserDirect />} />
       <Route path="/dapp-simple" element={<DappBrowserSimple />} />
 

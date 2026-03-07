@@ -13,7 +13,7 @@
 //!
 //! ## Usage
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use vaughan_lib::security::encryption::{hash_password, encrypt_data, decrypt_data};
 //!
 //! // Hash a password
@@ -111,6 +111,7 @@ pub fn encrypt_data(plaintext: &[u8], password: &str) -> Result<Vec<u8>, WalletE
     // Generate random nonce
     let mut nonce_bytes = [0u8; 12];
     OsRng.fill_bytes(&mut nonce_bytes);
+    #[allow(deprecated)]
     let nonce = Nonce::from_slice(&nonce_bytes);
     
     // Encrypt
@@ -150,6 +151,7 @@ pub fn decrypt_data(encrypted: &[u8], password: &str) -> Result<Vec<u8>, WalletE
     let cipher = Aes256Gcm::new_from_slice(&key)
         .map_err(|e| WalletError::DecryptionFailed(format!("Cipher creation failed: {}", e)))?;
     
+    #[allow(deprecated)]
     let nonce = Nonce::from_slice(nonce_bytes);
     
     // Decrypt

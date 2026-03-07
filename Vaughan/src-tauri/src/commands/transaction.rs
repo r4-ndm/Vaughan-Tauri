@@ -23,6 +23,10 @@ pub struct ValidateTransactionRequest {
     pub amount: String,
     /// Gas limit (optional)
     pub gas_limit: Option<u64>,
+    /// Token address for ERC20 transfers (optional)
+    pub token_address: Option<String>,
+    /// Optional raw transaction data payload (hex string)
+    pub data: Option<String>,
 }
 
 /// Gas estimation response
@@ -67,6 +71,15 @@ pub async fn validate_transaction(
     state: State<'_, VaughanState>,
     request: ValidateTransactionRequest,
 ) -> Result<(), String> {
+    // Basic validation
+    let _to = Address::from_str(&request.to)
+        .map_err(|_| format!("Invalid recipient address format: {}", request.to))?;
+        
+    if let Some(token) = &request.token_address {
+        let _token_addr = Address::from_str(token)
+            .map_err(|_| format!("Invalid token address format: {}", token))?;
+    }
+    
     // Get current adapter
     let adapter = state
         .current_adapter()
@@ -97,12 +110,14 @@ pub async fn validate_transaction(
 
 /// Estimate gas for a simple transfer
 ///
-/// Provides a basic gas estimation for ETH transfers.
-/// For contract interactions, use the full estimate_gas endpoint (Phase 2).
+/// Provides a basic gas estimation for ETH transfers by simulating the transaction
+/// against the network node.
 ///
 /// # Arguments
 ///
 /// * `state` - Application state
+/// * `to` - Recipient Address
+/// * `amount` - Amount in ETH
 ///
 /// # Returns
 ///
@@ -112,13 +127,19 @@ pub async fn validate_transaction(
 /// # Example (from frontend)
 ///
 /// ```typescript
-/// const estimate = await invoke('estimate_gas_simple');
-/// console.log(`Estimated gas: ${estimate.gas_limit}`);
-/// console.log(`Gas price: ${estimate.gas_price_gwei} gwei`);
+/// const estimate = await invoke('estimate_gas_simple', {
+///   to: "0x...",
+///   amount: "1.5"
+/// });
 /// ```
 #[tauri::command]
 pub async fn estimate_gas_simple(
     state: State<'_, VaughanState>,
+    from: String,
+    to: String,
+    amount: String,
+    token_address: Option<String>,
+    data: Option<String>,
 ) -> Result<EstimateGasResponse, String> {
     // Get current adapter
     let adapter = state
@@ -126,19 +147,94 @@ pub async fn estimate_gas_simple(
         .await
         .map_err(|e| e.user_message())?;
 
-    // Get current gas price from provider
+    // Parse inputs
+    let from_addr = alloy::primitives::Address::from_str(&from)
+        .map_err(|_| format!("Invalid from address: {}", from))?;
+
+    let to_addr = alloy::primitives::Address::from_str(&to)
+        .map_err(|_| format!("Invalid to address: {}", to))?;
+    
+    let value = crate::chains::evm::utils::parse_eth_to_wei(&amount, 18)
+        .unwrap_or(U256::ZERO);
+
+    // Get current gas price from provider, enforce minimum 1 Gwei (1_000_000_000 wei)
     use alloy::providers::Provider;
-    let gas_price = adapter
+    let mut gas_price = adapter
         .provider()
         .get_gas_price()
         .await
-        .map_err(|e| format!("Failed to get gas price: {}", e))?;
+        .unwrap_or(1_000_000_000);
+        
+    gas_price = std::cmp::max(gas_price, 1_000_000_000);
 
     // Format gas price in gwei
     let gas_price_gwei = crate::chains::evm::utils::format_wei_to_gwei(&gas_price.to_string());
 
-    // Calculate total fee for simple transfer (21000 gas)
-    let gas_limit = 21000u64;
+    // Build estimation request
+    use alloy::rpc::types::TransactionRequest;
+    use alloy::network::TransactionBuilder;
+    
+    let value_u128 = value.to::<u128>();
+    
+    let mut tx_request = TransactionRequest::default().with_from(from_addr);
+
+    if let Some(token_addr_str) = &token_address {
+        let token_addr = alloy::primitives::Address::from_str(token_addr_str)
+            .map_err(|_| format!("Invalid token address: {}", token_addr_str))?;
+        
+        use alloy::sol;
+        sol!(
+            #[allow(missing_docs)]
+            function transfer(address to, uint256 amount) external returns (bool);
+        );
+
+        let call = transferCall {
+            to: to_addr,
+            amount: alloy::primitives::U256::from(value_u128),
+        };
+        use alloy::sol_types::SolCall;
+        let data = call.abi_encode();
+
+        tx_request = tx_request
+            .with_to(token_addr)
+            .with_value(U256::ZERO)
+            .with_input(data);
+    } else if let Some(custom_data_str) = &data {
+        let decoded = hex::decode(custom_data_str.trim_start_matches("0x"))
+            .map_err(|e| format!("Invalid custom data hex: {}", e))?;
+        tx_request = tx_request
+            .with_to(to_addr)
+            .with_value(U256::from(value_u128))
+            .with_input(decoded);
+    } else {
+        tx_request = tx_request
+            .with_to(to_addr)
+            .with_value(U256::from(value_u128));
+    }
+
+    // Get exact gas limit required by node. estimate_gas returns u128 or U256 depending on Alloy version so wrap it carefully
+    // Get exact gas limit required by node
+    let gas_limit_val = match adapter.provider().estimate_gas(&tx_request).await {
+        Ok(gas) => {
+            println!("DEBUG: Gas estimate successful: {}", gas);
+            gas
+        },
+        Err(e) => {
+            // Log the actual EVM revert error instead of silently swallowing it
+            println!("ERROR: estimate_gas failed: {:?}", e);
+            if token_address.is_some() || data.is_some() {
+                100_000 // Safer EVM Fallback for Smart Contract interactions
+            } else {
+                21000 // Standard fallback
+            }
+        }
+    };
+
+    // Add 10% buffering to prevent sporadic out-of-gas, max out at u64 ceiling
+    let gas_limit_buffered = (gas_limit_val as u64 * 110) / 100;
+    
+    let gas_limit = gas_limit_buffered;
+
     let total_fee_wei = U256::from(gas_limit) * U256::from(gas_price);
     let total_fee_eth = crate::chains::evm::utils::format_wei_to_eth(total_fee_wei, 18);
 
@@ -168,6 +264,10 @@ pub struct BuildTransactionRequest {
     pub gas_price_gwei: Option<String>,
     /// Nonce (optional, will fetch if not provided)
     pub nonce: Option<u64>,
+    /// Token address for ERC20 transfers (optional)
+    pub token_address: Option<String>,
+    /// Optional transaction data
+    pub data: Option<String>,
 }
 
 /// Built transaction response
@@ -189,6 +289,8 @@ pub struct BuildTransactionResponse {
     pub chain_id: u64,
     /// Estimated total cost in ETH (amount + gas fee)
     pub total_cost_eth: String,
+    /// Transaction data payload (hex string)
+    pub data: Option<String>,
 }
 
 /// Sign transaction request
@@ -208,6 +310,8 @@ pub struct SignTransactionRequest {
     pub nonce: u64,
     /// Password for wallet unlock verification
     pub password: String,
+    /// Transaction data payload (hex string)
+    pub data: Option<String>,
 }
 
 /// Send transaction request
@@ -225,6 +329,10 @@ pub struct SendTransactionRequest {
     pub gas_price_gwei: Option<String>,
     /// Password for wallet unlock verification
     pub password: String,
+    /// Token address for ERC20 transfers (optional)
+    pub token_address: Option<String>,
+    /// Optional raw transaction data payload (hex string)
+    pub data: Option<String>,
 }
 
 /// Transaction response
@@ -270,6 +378,8 @@ pub async fn build_transaction(
     state: State<'_, VaughanState>,
     request: BuildTransactionRequest,
 ) -> Result<BuildTransactionResponse, String> {
+    println!("DEBUG: build_transaction received: {:#?}", request);
+    
     // Validate addresses
     let from = Address::from_str(&request.from)
         .map_err(|_| format!("Invalid from address: {}", request.from))?;
@@ -293,20 +403,84 @@ pub async fn build_transaction(
         .await
         .map_err(|e| format!("Failed to get chain ID: {}", e))?;
 
-    // Get or estimate gas limit
-    let gas_limit = request.gas_limit.unwrap_or(21000);
+    use alloy::rpc::types::TransactionRequest;
+    use alloy::network::TransactionBuilder;
 
-    // Get or fetch gas price
+    // Get or estimate gas limit, enforcing a hard floor of 21000 intrinsic gas
+    let mut tx_request = TransactionRequest::default().with_from(from);
+    let mut data_hex: Option<String> = request.data.clone();
+
+    if let Some(token_addr_str) = &request.token_address {
+        let token_addr = alloy::primitives::Address::from_str(token_addr_str)
+            .map_err(|_| format!("Invalid token address: {}", token_addr_str))?;
+        
+        use alloy::sol;
+        sol!(
+            #[allow(missing_docs)]
+            function transfer(address to, uint256 amount) external returns (bool);
+        );
+
+        let call = transferCall {
+            to,
+            amount: value,
+        };
+        use alloy::sol_types::SolCall;
+        let data = call.abi_encode();
+        data_hex = Some(hex::encode(&data));
+
+        tx_request = tx_request
+            .with_to(token_addr)
+            .with_value(U256::ZERO)
+            .with_input(data);
+    } else if let Some(custom_data) = &data_hex {
+        let decoded = hex::decode(custom_data.trim_start_matches("0x"))
+            .map_err(|e| format!("Invalid data hex: {}", e))?;
+        tx_request = tx_request
+            .with_to(to)
+            .with_value(value)
+            .with_input(decoded);
+    } else {
+        tx_request = tx_request
+            .with_to(to)
+            .with_value(value);
+    }
+
+    let gas_limit = if let Some(gl) = request.gas_limit {
+        std::cmp::max(gl, 21000)
+    } else {
+            
+        let est = match adapter.provider().estimate_gas(&tx_request).await {
+            Ok(gas) => {
+                println!("DEBUG: [build_tx] Gas estimate successful: {}", gas);
+                gas
+            },
+            Err(e) => {
+                println!("ERROR: [build_tx] estimate_gas failed: {:?}", e);
+                if request.token_address.is_some() || data_hex.is_some() {
+                    100_000 // Safe fallback for tokens and payloads
+                } else {
+                    21000
+                }
+            }
+        };
+            
+        // Add 10% buffering
+        let buffered = (est as u64 * 110) / 100;
+        std::cmp::max(buffered, 21000)
+    };
+
+    // Get or fetch gas price, enforcing a 1 Gwei minimum
     let gas_price = if let Some(price_gwei) = request.gas_price_gwei {
-        crate::chains::evm::utils::parse_eth_to_wei(&price_gwei, 9)
-            .map_err(|e| e.user_message())?
+        let parsed = crate::chains::evm::utils::parse_eth_to_wei(&price_gwei, 9)
+            .map_err(|e| e.user_message())?;
+        std::cmp::max(parsed, U256::from(1_000_000_000u64))
     } else {
         let price_u128 = adapter
             .provider()
             .get_gas_price()
             .await
-            .map_err(|e| format!("Failed to get gas price: {}", e))?;
-        U256::from(price_u128)
+            .unwrap_or(1_000_000_000); // Default to 1 Gwei if fetch fails
+        U256::from(std::cmp::max(price_u128, 1_000_000_000))
     };
 
     // Get or fetch nonce
@@ -316,6 +490,7 @@ pub async fn build_transaction(
         adapter
             .provider()
             .get_transaction_count(from)
+            .pending()
             .await
             .map_err(|e| format!("Failed to get nonce: {}", e))?
     };
@@ -334,6 +509,7 @@ pub async fn build_transaction(
         nonce,
         chain_id,
         total_cost_eth,
+        data: data_hex,
     })
 }
 
@@ -378,6 +554,8 @@ pub async fn sign_transaction(
     state: State<'_, VaughanState>,
     request: SignTransactionRequest,
 ) -> Result<String, String> {
+    println!("DEBUG: sign_transaction received: {:#?}", request);
+    
     // Verify password
     state
         .wallet_service
@@ -422,14 +600,29 @@ pub async fn sign_transaction(
     use alloy::network::{EthereumWallet, TransactionBuilder};
     use alloy::rpc::types::TransactionRequest;
     
-    let tx_request = TransactionRequest::default()
+    let mut tx_request = TransactionRequest::default()
         .with_from(from)
-        .with_to(to)
-        .with_value(value)
         .with_gas_limit(request.gas_limit as u128)
         .with_gas_price(gas_price.to::<u128>())
         .with_nonce(request.nonce)
         .with_chain_id(chain_id);
+    
+    if let Some(token_data) = request.data {
+        let input_bytes = hex::decode(token_data)
+            .map_err(|e| format!("Invalid transaction data payload: {}", e))?;
+        // If it's a token transfer, 'to' points to the token contract, and 'value' is 0. 
+        // We expect the caller to have sent 'to' as the token address and 'value' as 0 in this case.
+        tx_request = tx_request
+            .with_to(to)
+            .with_value(value)
+            .with_input(input_bytes);
+    } else {
+        tx_request = tx_request
+            .with_to(to)
+            .with_value(value);
+    }
+
+    println!("DEBUG: Built TransactionRequest: {:#?}", tx_request);
 
     // Wrap signer in EthereumWallet
     let wallet = EthereumWallet::from(signer);
@@ -485,6 +678,7 @@ pub async fn send_transaction(
     state: State<'_, VaughanState>,
     request: SendTransactionRequest,
 ) -> Result<TransactionResponse, String> {
+    println!("DEBUG: send_transaction received: {:#?}", request);
     // Verify password first
     state
         .wallet_service
@@ -500,19 +694,33 @@ pub async fn send_transaction(
         gas_limit: request.gas_limit,
         gas_price_gwei: request.gas_price_gwei.clone(),
         nonce: None, // Will fetch current nonce
+        token_address: request.token_address.clone(),
+        data: request.data.clone(),
     };
 
     let built_tx = build_transaction(state.clone(), build_request).await?;
 
     // Sign transaction
+    let mut to_addr = built_tx.to.clone();
+    let mut val = built_tx.value.clone();
+    
+    if let Some(_) = built_tx.data {
+        // For a token transfer, the target is the token contract, not the recipient.
+        if let Some(token_addr) = &request.token_address {
+             to_addr = token_addr.clone();
+             val = "0".to_string(); // we override value to 0 for ERC20 transfer execution
+        }
+    }
+
     let sign_request = SignTransactionRequest {
         from: request.from.clone(),
-        to: request.to.clone(),
-        value: built_tx.value.clone(),
+        to: to_addr,
+        value: val,
         gas_limit: built_tx.gas_limit,
         gas_price: built_tx.gas_price.clone(),
         nonce: built_tx.nonce,
         password: request.password.clone(),
+        data: built_tx.data.clone(),
     };
 
     let signed_tx = sign_transaction(state.clone(), sign_request).await?;

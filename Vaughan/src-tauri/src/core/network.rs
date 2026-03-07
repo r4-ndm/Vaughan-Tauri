@@ -13,8 +13,8 @@
 //! ## Example
 //!
 //! ```rust,no_run
-//! use vaughan::core::NetworkService;
-//! use vaughan::chains::ChainAdapter;
+//! use vaughan_lib::core::NetworkService;
+//! use vaughan_lib::chains::ChainAdapter;
 //!
 //! # async fn example(adapter: &dyn ChainAdapter) -> Result<(), Box<dyn std::error::Error>> {
 //! let service = NetworkService::new();
@@ -25,7 +25,7 @@
 //!
 //! // Get network info
 //! let info = service.get_network_info(adapter).await?;
-//! println!("Network: {}", info.name);
+//! println!("Network: {}", info.config.name);
 //! # Ok(())
 //! # }
 //! ```
@@ -123,8 +123,8 @@ impl NetworkService {
     /// # Example
     ///
     /// ```rust,no_run
-    /// # use vaughan::core::NetworkService;
-    /// # use vaughan::chains::ChainAdapter;
+    /// # use vaughan_lib::core::NetworkService;
+    /// # use vaughan_lib::chains::ChainAdapter;
     /// # async fn example(adapter: &dyn ChainAdapter) -> Result<(), Box<dyn std::error::Error>> {
     /// let service = NetworkService::new();
     /// let info = service.get_network_info(adapter).await?;
@@ -184,8 +184,8 @@ impl NetworkService {
     /// # Example
     ///
     /// ```rust,no_run
-    /// # use vaughan::core::NetworkService;
-    /// # use vaughan::chains::ChainAdapter;
+    /// # use vaughan_lib::core::NetworkService;
+    /// # use vaughan_lib::chains::ChainAdapter;
     /// # async fn example(adapter: &dyn ChainAdapter) -> Result<(), Box<dyn std::error::Error>> {
     /// let service = NetworkService::new();
     /// if service.check_health(adapter).await? {
@@ -223,15 +223,15 @@ impl NetworkService {
     /// # Example
     ///
     /// ```rust,no_run
-    /// # use vaughan::core::NetworkService;
-    /// # use vaughan::chains::ChainAdapter;
+    /// # use vaughan_lib::core::NetworkService;
+    /// # use vaughan_lib::chains::ChainAdapter;
     /// # async fn example(adapter: &dyn ChainAdapter) -> Result<(), Box<dyn std::error::Error>> {
     /// let service = NetworkService::new();
     /// let balance = service.get_balance(
     ///     adapter,
     ///     "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
     /// ).await?;
-    /// println!("Balance: {}", balance.value);
+    /// println!("Balance: {}", balance.formatted);
     /// # Ok(())
     /// # }
     /// ```
@@ -259,8 +259,8 @@ impl NetworkService {
     /// # Example
     ///
     /// ```rust,no_run
-    /// # use vaughan::core::{NetworkService, NetworkConfig, TokenInfo};
-    /// # use vaughan::chains::ChainType;
+    /// # use vaughan_lib::core::{NetworkService, NetworkConfig, TokenInfo};
+    /// # use vaughan_lib::chains::ChainType;
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let service = NetworkService::new();
     /// let config = NetworkConfig {
@@ -340,7 +340,7 @@ impl NetworkService {
     /// # Example
     ///
     /// ```rust
-    /// # use vaughan::core::NetworkService;
+    /// # use vaughan_lib::core::NetworkService;
     /// let service = NetworkService::new();
     /// let networks = service.get_predefined_networks();
     /// for network in networks {
@@ -468,6 +468,21 @@ impl NetworkService {
                     decimals: 18,
                 },
                 is_testnet: false,
+            },
+            // PulseChain Testnet V4
+            NetworkConfig {
+                id: "pulsechain-testnet-v4".to_string(),
+                name: "PulseChain Testnet-V4".to_string(),
+                chain_type: ChainType::Evm,
+                chain_id: 943,
+                rpc_url: "https://rpc.v4.testnet.pulsechain.com".to_string(),
+                explorer_url: Some("https://scan.v4.testnet.pulsechain.com".to_string()),
+                native_token: TokenInfo {
+                    symbol: "tPLS".to_string(),
+                    name: "Pulse".to_string(),
+                    decimals: 18,
+                },
+                is_testnet: true,
             },
         ]
     }

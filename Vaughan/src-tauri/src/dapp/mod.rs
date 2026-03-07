@@ -10,7 +10,6 @@ pub mod window_registry;
 pub mod health;
 pub mod logging;
 pub mod profiling;
-pub mod cert;
 
 pub use rate_limiter::RateLimiter;
 pub use session::{SessionManager, DappConnection, DappOrigin};

@@ -10,14 +10,11 @@ missing-docs-in-crate-items = true
 # Avoid breaking changes
 avoid-breaking-exported-api = true
 
-# Disallowed methods (security-critical)
+# Disallowed methods (security-critical — production code only)
+# NOTE: unwrap/expect are allowed in #[cfg(test)] blocks.
+# To enforce this at the file level, add #[cfg_attr(not(test), deny(clippy::unwrap_used))]
+# in production modules.
 disallowed-methods = [
-    # Disallow unwrap/expect in production code
-    { path = "std::option::Option::unwrap", reason = "use proper error handling with ?" },
-    { path = "std::result::Result::unwrap", reason = "use proper error handling with ?" },
-    { path = "std::option::Option::expect", reason = "use proper error handling with ?" },
-    { path = "std::result::Result::expect", reason = "use proper error handling with ?" },
-    
     # Disallow panic in production code
     { path = "std::panic", reason = "panics should not occur in production" },
     

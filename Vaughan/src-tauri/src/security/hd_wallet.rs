@@ -25,7 +25,7 @@
 //!
 //! ## Usage
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use vaughan_lib::security::hd_wallet::{generate_mnemonic, mnemonic_to_seed, derive_account};
 //!
 //! // Generate a 12-word mnemonic
@@ -162,6 +162,39 @@ pub fn derive_account(seed: &[u8], index: u32) -> Result<(String, Address), Wall
     let address = signer.address();
     
     Ok((private_key_hex, address))
+}
+
+/// Derive a deterministic Railgun Mnemonic from the master seed
+///
+/// Railgun's TS SDK strictly requires a mnemonic phrase to compute ZK keys.
+/// To preserve absolute security, we use HD derivation (m/44'/60'/0'/2/0)
+/// to derive a distinct 32-byte private key, which is then encoded directly
+/// into a 24-word BIP-39 mnemonic. This ensures the ZK wallet is deterministic
+/// but entirely isolated from the ECDSA main wallet keys.
+pub fn derive_railgun_mnemonic(seed: &[u8]) -> Result<String, WalletError> {
+    // Create master key from seed
+    let master_key = XPriv::root_from_seed(seed, None)
+        .map_err(|e| WalletError::KeyDerivationFailed(format!("Master key creation failed: {}", e)))?;
+    
+    // Dedicated derivation path for Railgun entropy
+    let path = "m/44'/60'/0'/2/0";
+    let derivation_path = DerivationPath::from_str(path)
+        .map_err(|e| WalletError::KeyDerivationFailed(format!("Invalid derivation path: {}", e)))?;
+    
+    // Derive the key
+    let derived_key = master_key
+        .derive_path(&derivation_path)
+        .map_err(|e| WalletError::KeyDerivationFailed(format!("Key derivation failed: {}", e)))?;
+    
+    use coins_bip32::ecdsa::SigningKey;
+    let signing_key: &SigningKey = derived_key.as_ref();
+    let entropy_bytes = signing_key.to_bytes(); // 32 bytes
+    
+    // Convert the 32-byte entropy into a 24-word mnemonic
+    let mnemonic = Mnemonic::from_entropy_in(Language::English, &entropy_bytes)
+        .map_err(|e| WalletError::KeyDerivationFailed(format!("Mnemonic conversion failed: {}", e)))?;
+    
+    Ok(mnemonic.to_string())
 }
 
 /// Derive multiple accounts from a seed

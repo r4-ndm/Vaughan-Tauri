@@ -27,6 +27,10 @@ pub struct EvmNetworkConfig {
     /// Block explorer URL (optional)
     pub explorer_url: Option<String>,
 
+    /// Block explorer API base URL (Etherscan-compatible)
+    /// e.g. "https://api.etherscan.io/api" or "https://api.scan.pulsechain.com/api"
+    pub explorer_api_url: Option<String>,
+
     /// Native token symbol
     pub native_symbol: String,
 
@@ -53,6 +57,7 @@ impl EvmNetworkConfig {
             chain_id,
             rpc_url,
             explorer_url: None,
+            explorer_api_url: None,
             native_symbol,
             native_name,
             decimals: 18,
@@ -62,6 +67,12 @@ impl EvmNetworkConfig {
     /// Add block explorer URL
     pub fn with_explorer(mut self, explorer_url: String) -> Self {
         self.explorer_url = Some(explorer_url);
+        self
+    }
+
+    /// Add block explorer API URL (Etherscan-compatible)
+    pub fn with_explorer_api(mut self, api_url: String) -> Self {
+        self.explorer_api_url = Some(api_url);
         self
     }
 }
@@ -81,6 +92,7 @@ pub fn ethereum_mainnet() -> EvmNetworkConfig {
         "Ethereum".to_string(),
     )
     .with_explorer("https://etherscan.io".to_string())
+    .with_explorer_api("https://api.etherscan.io/api".to_string())
 }
 
 /// Get PulseChain Mainnet configuration
@@ -94,6 +106,7 @@ pub fn pulsechain_mainnet() -> EvmNetworkConfig {
         "PulseChain".to_string(),
     )
     .with_explorer("https://scan.pulsechain.com".to_string())
+    .with_explorer_api("https://api.scan.pulsechain.com/api".to_string())
 }
 
 /// Get Polygon Mainnet configuration
@@ -185,6 +198,7 @@ pub fn pulsechain_testnet_v4() -> EvmNetworkConfig {
         "Test PulseChain".to_string(),
     )
     .with_explorer("https://scan.v4.testnet.pulsechain.com".to_string())
+    .with_explorer_api("https://api.scan.v4.testnet.pulsechain.com/api".to_string())
 }
 
 // ============================================================================

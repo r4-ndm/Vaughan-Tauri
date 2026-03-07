@@ -160,6 +160,7 @@ lazy_static::lazy_static! {
 /// - Rate limiting per (window_label, origin) pair
 #[tauri::command]
 pub async fn dapp_request(
+    app: AppHandle,
     window: WebviewWindow,
     state: State<'_, VaughanState>,
     request: DappRequest,
@@ -297,7 +298,7 @@ pub async fn dapp_request(
     // ========================================================================
 
     // Pass window_label to rpc_handler for approval routing
-    match rpc_handler::handle_request(&state, &window_label, &origin, &request.method, request.params).await {
+    match rpc_handler::handle_request(&app, &state, &window_label, &origin, &request.method, request.params).await {
         Ok(result) => {
             // Mark as processed
             PROCESSED_REQUESTS.mark_processed(request.id.clone()).await;
@@ -321,7 +322,8 @@ pub async fn dapp_request(
                 WalletError::InvalidParams => (-32602, "Invalid params".to_string()),
                 WalletError::InvalidAddress(_) => (-32602, "Invalid address".to_string()),
                 WalletError::WalletLocked => (4100, "Wallet is locked".to_string()),
-                _ => (-32603, e.to_string()),
+                WalletError::UnsupportedNetwork(_) => (4901, "Chain disconnected".to_string()),
+                e => (-32603, e.to_string()),
             };
 
             Ok(DappResponse {

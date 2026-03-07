@@ -13,8 +13,8 @@
 //! ## Example
 //!
 //! ```rust,no_run
-//! use vaughan::core::PriceService;
-//! use vaughan::chains::ChainType;
+//! use vaughan_lib::core::PriceService;
+//! use vaughan_lib::chains::ChainType;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! let service = PriceService::new();
@@ -45,7 +45,7 @@ impl PriceService {
     /// # Example
     ///
     /// ```rust
-    /// # use vaughan::core::PriceService;
+    /// # use vaughan_lib::core::PriceService;
     /// let service = PriceService::new();
     /// ```
     pub fn new() -> Self {
@@ -77,8 +77,8 @@ impl PriceService {
     /// # Example
     ///
     /// ```rust,no_run
-    /// # use vaughan::core::PriceService;
-    /// # use vaughan::chains::ChainType;
+    /// # use vaughan_lib::core::PriceService;
+    /// # use vaughan_lib::chains::ChainType;
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let service = PriceService::new();
     /// let eth_price = service.fetch_native_price(ChainType::Evm, 1).await?;
@@ -118,8 +118,8 @@ impl PriceService {
     /// # Example
     ///
     /// ```rust,no_run
-    /// # use vaughan::core::PriceService;
-    /// # use vaughan::chains::ChainType;
+    /// # use vaughan_lib::core::PriceService;
+    /// # use vaughan_lib::chains::ChainType;
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let service = PriceService::new();
     /// // USDC on Ethereum

@@ -1,0 +1,143 @@
+@import "./styles/tokens.css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    --primary: 210 20% 90%;
+    --primary-foreground: 240 20% 5%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+
+    --radius: 0px;
+  }
+
+  .dark {
+    /* Near-black background matching old Vaughan */
+    --background: 240 20% 5%;
+    --foreground: 210 20% 90%;
+
+    /* Cards: slightly lighter than background */
+    --card: 240 15% 8%;
+    --card-foreground: 210 20% 90%;
+
+    /* Popover */
+    --popover: 240 15% 8%;
+    --popover-foreground: 210 20% 90%;
+
+    /* Primary: light text on dark */
+    --primary: 210 20% 90%;
+    --primary-foreground: 240 20% 5%;
+
+    /* Secondary: dark gray */
+    --secondary: 240 10% 14%;
+    --secondary-foreground: 210 20% 90%;
+
+    /* Muted */
+    --muted: 240 10% 14%;
+    --muted-foreground: 215 15% 55%;
+
+    /* Accent */
+    --accent: 240 10% 14%;
+    --accent-foreground: 210 20% 90%;
+
+    /* Destructive */
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    /* Border: subtle dark gray */
+    --border: 240 10% 18%;
+    --input: 240 10% 12%;
+    --ring: 210 20% 90%;
+  }
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Colorful gradient text for the VAUGHAN logo */
+.vaughan-logo {
+  background: linear-gradient(90deg,
+      #00ffff 0%,
+      #00ff88 20%,
+      #44ff44 40%,
+      #ffaa00 60%,
+      #ff6600 75%,
+      #ff00ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-family: 'Courier New', 'Consolas', monospace;
+  font-weight: 900;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+/* Rainbow address text segments */
+.address-green {
+  color: #00ff88;
+}
+
+.address-magenta {
+  color: #ff00ff;
+}
+
+.address-cyan {
+  color: #00ffff;
+}
+
+.address-orange {
+  color: #ffaa00;
+}
+
+.address-white {
+  color: #e0e0e0;
+}
+
+/* Action buttons — square corners, no green highlights */
+.vaughan-btn {
+  @apply bg-card border border-border px-4 py-2.5 text-sm font-medium text-foreground transition-all duration-150 cursor-pointer text-left;
+}
+
+.vaughan-btn:hover {
+  @apply bg-secondary;
+}
+
+.vaughan-btn:active {
+  @apply bg-accent;
+}

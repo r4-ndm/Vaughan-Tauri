@@ -24,7 +24,9 @@
 
 pub mod dapp;
 pub mod dapp_ipc;
+pub mod history;
 pub mod network;
+pub mod persistence;
 pub mod token;
 pub mod transaction;
 pub mod wallet;
@@ -33,7 +35,11 @@ pub mod window;
 // Re-export command functions for easy registration
 pub use dapp::{connect_dapp, dapp_request, disconnect_dapp, get_connected_dapps};
 pub use dapp_ipc::handle_dapp_request;
-pub use network::{get_balance, get_block_number, get_chain_id, get_network_info, switch_network};
+pub use network::{
+    get_balance, get_block_number, get_chain_id, get_network_info, get_supported_networks,
+    switch_network,
+};
+pub use persistence::{export_state, reset_state};
 pub use token::{get_token_price, refresh_token_prices};
 pub use transaction::{
     build_transaction, estimate_gas_simple, send_transaction, sign_transaction,
@@ -43,4 +49,7 @@ pub use wallet::{
     create_account, create_wallet, delete_account, get_accounts, import_account, import_wallet,
     is_wallet_locked, lock_wallet, set_active_account, unlock_wallet, wallet_exists,
 };
+pub use history::get_transactions;
 pub use window::open_dapp_browser;
+
+pub mod audio;

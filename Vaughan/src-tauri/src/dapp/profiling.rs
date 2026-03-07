@@ -13,7 +13,7 @@
 //! # Example
 //!
 //! ```rust,no_run
-//! use vaughan::dapp::profiling::Profiler;
+//! use vaughan_lib::dapp::profiling::Profiler;
 //!
 //! # async fn example() {
 //! let profiler = Profiler::new(1000);
@@ -79,7 +79,7 @@ impl Profiler {
     /// # Example
     ///
     /// ```rust
-    /// use vaughan::dapp::profiling::Profiler;
+    /// use vaughan_lib::dapp::profiling::Profiler;
     ///
     /// let profiler = Profiler::new(1000);
     /// ```
@@ -100,7 +100,7 @@ impl Profiler {
     /// # Example
     ///
     /// ```rust,no_run
-    /// # use vaughan::dapp::profiling::Profiler;
+    /// # use vaughan_lib::dapp::profiling::Profiler;
     /// # async fn example() {
     /// let profiler = Profiler::new(1000);
     /// profiler.record("eth_call".to_string(), 45).await;
@@ -134,7 +134,7 @@ impl Profiler {
     /// # Example
     ///
     /// ```rust,no_run
-    /// # use vaughan::dapp::profiling::Profiler;
+    /// # use vaughan_lib::dapp::profiling::Profiler;
     /// # async fn example() {
     /// let profiler = Profiler::new(1000);
     /// let stats = profiler.get_stats().await;
@@ -193,7 +193,7 @@ impl Profiler {
     /// # Example
     ///
     /// ```rust,no_run
-    /// # use vaughan::dapp::profiling::Profiler;
+    /// # use vaughan_lib::dapp::profiling::Profiler;
     /// # async fn example() {
     /// let profiler = Profiler::new(1000);
     /// let recent = profiler.get_recent(10).await;
@@ -226,7 +226,7 @@ impl Profiler {
     /// # Example
     ///
     /// ```rust,no_run
-    /// # use vaughan::dapp::profiling::Profiler;
+    /// # use vaughan_lib::dapp::profiling::Profiler;
     /// # async fn example() {
     /// let profiler = Profiler::new(1000);
     ///
@@ -245,7 +245,7 @@ impl Profiler {
     /// # Example
     ///
     /// ```rust,no_run
-    /// # use vaughan::dapp::profiling::Profiler;
+    /// # use vaughan_lib::dapp::profiling::Profiler;
     /// # async fn example() {
     /// let profiler = Profiler::new(1000);
     /// profiler.clear().await;
@@ -265,7 +265,7 @@ impl Profiler {
     /// # Example
     ///
     /// ```rust,no_run
-    /// # use vaughan::dapp::profiling::Profiler;
+    /// # use vaughan_lib::dapp::profiling::Profiler;
     /// # async fn example() {
     /// let profiler = Profiler::new(1000);
     /// let count = profiler.count().await;

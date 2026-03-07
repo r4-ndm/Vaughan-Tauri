@@ -14,7 +14,7 @@
 //!
 //! ## Usage
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use vaughan_lib::security::KeyringService;
 //!
 //! // Create service

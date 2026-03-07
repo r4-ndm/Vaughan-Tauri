@@ -1,0 +1,177 @@
+/* src/styles/tokens.css */
+
+:root {
+    /* ==========================================================================
+     VaughanColors - Main Professional Color Palette (from Iced)
+     ========================================================================== */
+
+    /* Primary brand colors - dark grey */
+    --vaughan-primary: #4d4d4d;
+    /* 0.3, 0.3, 0.3 */
+    --vaughan-primary-hover: #666666;
+    /* 0.4, 0.4, 0.4 */
+    --vaughan-primary-active: #404040;
+    /* 0.25, 0.25, 0.25 */
+
+    /* Secondary colors */
+    --vaughan-secondary: #808080;
+    /* 0.5, 0.5, 0.5 */
+    --vaughan-secondary-hover: #999999;
+    /* 0.6, 0.6, 0.6 */
+
+    /* Status colors */
+    --vaughan-success: #00cc00;
+    /* 0.0, 0.8, 0.0 */
+    --vaughan-success-hover: #00e600;
+    /* 0.0, 0.9, 0.0 */
+    --vaughan-warning: #ffb200;
+    /* 1.0, 0.7, 0.0 */
+    --vaughan-warning-hover: #ffcc00;
+    /* 1.0, 0.8, 0.0 */
+    --vaughan-error: #ff6666;
+    /* 1.0, 0.4, 0.4 */
+    --vaughan-error-hover: #ff8080;
+    /* 1.0, 0.5, 0.5 */
+    --vaughan-info: #00b2ff;
+    /* 0.0, 0.7, 1.0 */
+
+    /* Text colors */
+    --vaughan-text-primary: #ffffff;
+    /* 1.0, 1.0, 1.0 */
+    --vaughan-text-secondary: #b3b3b3;
+    /* 0.7, 0.7, 0.7 */
+    --vaughan-text-muted: #808080;
+    /* 0.5, 0.5, 0.5 */
+    --vaughan-text-disabled: #4d4d4d;
+    /* 0.3, 0.3, 0.3 */
+
+    /* Background colors - Deep black theme */
+    --vaughan-bg-primary: #000000;
+    /* 0.0, 0.0, 0.0 */
+    --vaughan-bg-secondary: #050505;
+    /* 0.02, 0.02, 0.02 */
+    --vaughan-bg-tertiary: #0d0d0d;
+    /* 0.05, 0.05, 0.05 */
+    --vaughan-bg-card: #080808;
+    /* 0.03, 0.03, 0.03 */
+
+    /* Border colors */
+    --vaughan-border-primary: #262626;
+    /* 0.15, 0.15, 0.15 */
+    --vaughan-border-secondary: #404040;
+    /* 0.25, 0.25, 0.25 */
+    --vaughan-border-focus: #3366cc;
+    /* 0.2, 0.4, 0.8 */
+
+
+    /* ==========================================================================
+     BlackThemeColors - Deep Dark Theme Palette
+     ========================================================================== */
+
+    --black-text-primary: #f2f2f2;
+    /* 0.95 */
+    --black-text-secondary: #cccccc;
+    /* 0.8 */
+    --black-text-disabled: #808080;
+    /* 0.5 */
+
+    --black-primary: #1a1a1a;
+    /* 0.1 */
+    --black-primary-hover: #262626;
+    /* 0.15 */
+    --black-secondary: #141414;
+    /* 0.08 */
+
+    --black-steel-border: #333840;
+    /* 0.2, 0.22, 0.25 */
+    --black-void-border: #1a1a1a;
+    /* 0.1, 0.1, 0.1 */
+    --black-matte-border: #262626;
+    /* 0.15, 0.15, 0.15 */
+    --black-steel-border-focus: #4d5966;
+    /* 0.3, 0.35, 0.4 */
+    --black-void-border-focus: #333333;
+    /* 0.2, 0.2, 0.2 */
+    --black-matte-border-focus: #404040;
+    /* 0.25, 0.25, 0.25 */
+
+
+    /* ==========================================================================
+     Spacing Scale (based on 4px grid)
+     ========================================================================== */
+    --spacing-1: 0.25rem;
+    /* 4px */
+    --spacing-2: 0.5rem;
+    /* 8px */
+    --spacing-3: 0.75rem;
+    /* 12px */
+    --spacing-4: 1rem;
+    /* 16px */
+    --spacing-5: 1.25rem;
+    /* 20px */
+    --spacing-6: 1.5rem;
+    /* 24px */
+    --spacing-8: 2rem;
+    /* 32px */
+    --spacing-10: 2.5rem;
+    /* 40px */
+    --spacing-12: 3rem;
+    /* 48px */
+    --spacing-16: 4rem;
+    /* 64px */
+    --spacing-20: 5rem;
+    /* 80px */
+    --spacing-24: 6rem;
+    /* 96px */
+
+
+    /* ==========================================================================
+     Typography Scale
+     ========================================================================== */
+    --font-xs: 0.75rem;
+    /* 12px */
+    --font-sm: 0.875rem;
+    /* 14px */
+    --font-base: 1rem;
+    /* 16px */
+    --font-lg: 1.125rem;
+    /* 18px */
+    --font-xl: 1.25rem;
+    /* 20px */
+    --font-2xl: 1.5rem;
+    /* 24px */
+    --font-3xl: 1.875rem;
+    /* 30px */
+    --font-4xl: 2.25rem;
+    /* 36px */
+
+    --font-weight-normal: 400;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+    --font-weight-bold: 700;
+
+
+    /* ==========================================================================
+     Shadow Styles
+     ========================================================================== */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-base: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    --shadow-inner: inset 0 2px 4px 0 rgb(0 0 0 / 0.05);
+
+
+    /* ==========================================================================
+     Border Radius Values (Sharp corners as per existing wallet styling)
+     ========================================================================== */
+    --radius-none: 0px;
+    --radius-sm: 0.125rem;
+    /* 2px */
+    --radius-base: 0.25rem;
+    /* 4px */
+    --radius-md: 0.375rem;
+    /* 6px */
+    --radius-lg: 0.5rem;
+    /* 8px */
+    --radius-full: 9999px;
+}
