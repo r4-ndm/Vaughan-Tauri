@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, ExternalLink, Globe, Search, Plus } from "lucide-react";
+import { ArrowLeft, ExternalLink, Search, Plus } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Layout } from "../components/Layout";
 import { NetworkSelector } from "../components/NetworkSelector";
@@ -242,6 +242,29 @@ export default function DApps() {
         localStorage.setItem('vaughan_custom_dapps', JSON.stringify(updatedList));
     };
 
+    const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>, dappUrl: string, dappIcon?: string) => {
+        const target = e.target as HTMLImageElement;
+        const hostname = new URL(dappUrl).hostname;
+
+        // If Google fails, try Clearbit
+        if (target.src.includes('google.com')) {
+            target.src = `https://logo.clearbit.com/${hostname}`;
+        }
+        // If Clearbit fails or custom URL fails, try root domain as last ditch
+        else if (target.src.includes('clearbit.com') || target.src === dappIcon) {
+            const rootDomain = hostname.split('.').slice(-2).join('.');
+            if (hostname !== rootDomain) {
+                target.src = `https://www.google.com/s2/favicons?domain=${rootDomain}&sz=128`;
+            } else {
+                target.src = `https://avatar.vercel.sh/${hostname}`;
+            }
+        }
+        // Final generic fallback
+        else {
+            target.src = `https://avatar.vercel.sh/${hostname}`;
+        }
+    };
+
     return (
         <Layout showActions={false}>
             <div className="max-w-5xl mx-auto w-full space-y-6 pt-2">
@@ -290,28 +313,7 @@ export default function DApps() {
                                             src={getDAppIcon(dapp)}
                                             alt={dapp.name}
                                             className="w-full h-full object-contain"
-                                            onError={(e) => {
-                                                const target = e.target as HTMLImageElement;
-                                                const hostname = new URL(dapp.url).hostname;
-
-                                                // If Google fails, try Clearbit
-                                                if (target.src.includes('google.com')) {
-                                                    target.src = `https://logo.clearbit.com/${hostname}`;
-                                                }
-                                                // If Clearbit fails or custom URL fails, try root domain as last ditch
-                                                else if (target.src.includes('clearbit.com') || target.src === dapp.icon) {
-                                                    const rootDomain = hostname.split('.').slice(-2).join('.');
-                                                    if (hostname !== rootDomain) {
-                                                        target.src = `https://www.google.com/s2/favicons?domain=${rootDomain}&sz=128`;
-                                                    } else {
-                                                        target.src = `https://avatar.vercel.sh/${hostname}`;
-                                                    }
-                                                }
-                                                // Final generic fallback
-                                                else {
-                                                    target.src = `https://avatar.vercel.sh/${hostname}`;
-                                                }
-                                            }}
+                                            onError={(e) => handleImageError(e, dapp.url, dapp.icon)}
                                         />
                                     </div>
                                     <ExternalLink className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
