@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -11,11 +11,14 @@ import { Eye, EyeOff, Copy, Check, X } from 'lucide-react';
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-            <div className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4" onClick={onClose}>
+            <div
+                className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+                onClick={(e) => e.stopPropagation()}
+            >
                 <div className="flex justify-between items-center px-5 pt-5 pb-3 border-b border-border/50">
                     <h2 className="text-base font-semibold">{title}</h2>
-                    <button onClick={onClose} className="p-1 hover:bg-secondary rounded text-muted-foreground">
+                    <button onClick={onClose} className="p-1 hover:bg-secondary rounded text-muted-foreground transition-colors">
                         <X className="w-4 h-4" />
                     </button>
                 </div>
@@ -437,7 +440,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
     onSettingsClick,
     disabled = false,
 }) => {
-    const [modal, setModal] = useState<'create' | 'import' | null>(null);
+    const [modal, setModal] = useState<'create' | 'import' | 'hardware' | null>(null);
 
     // Fetch whether the wallet is initialized directly
     const { data: walletExists } = useQuery({
@@ -468,7 +471,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
                     className="vaughan-btn flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                     <span>Import</span>
                 </button>
-                <button disabled={true}
+                <button onClick={() => setModal('hardware')} disabled={disabled}
                     className="vaughan-btn flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                     <span>Hardware</span>
                 </button>
@@ -484,9 +487,14 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
 
             {modal === 'create' && <CreateWalletModal onClose={() => setModal(null)} />}
             {modal === 'import' && <ImportModalDialog onClose={() => setModal(null)} walletExists={!!walletExists} />}
+            {modal === 'hardware' && (
+                <Modal title="Hardware Wallet" onClose={() => setModal(null)}>
+                    <div className="py-4 text-center">
+                        <p className="text-sm text-foreground font-medium">Coming Soon</p>
+                        <p className="text-xs text-muted-foreground mt-1">Trezor and Ledger support coming soon.</p>
+                    </div>
+                </Modal>
+            )}
         </>
     );
 };
-
-// Required for JSX in this file
-import React from 'react';

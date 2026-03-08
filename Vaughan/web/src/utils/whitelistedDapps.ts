@@ -242,4 +242,15 @@ export const WHITELISTED_DAPPS: WhitelistedDapp[] = [
         verified: true,
         dateAdded: '2026-03-07',
     },
+    {
+        id: 'pump-tires',
+        name: 'Pump Tires',
+        description: 'The premiere fair-launch platform for PulseChain tokens.',
+        url: 'https://pump.tires/',
+        icon: '/pump.webp',
+        category: 'dex',
+        chains: [369],
+        verified: true,
+        dateAdded: '2026-03-08',
+    },
 ];

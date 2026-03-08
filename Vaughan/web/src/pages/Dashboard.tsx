@@ -6,7 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { Layout } from "../components/Layout";
 import { NetworkSelector } from "../components/NetworkSelector";
 import { AccountSelector } from "../components/AccountSelector";
-import { AddressDisplay } from "../components/AddressDisplay";
+import { AddressDisplay, ColoredAddress } from "../components/AddressDisplay";
 
 import {
     getTrackedTokens,
@@ -20,8 +20,8 @@ import { ShieldModal } from "../components/PrivacyModals/ShieldModal";
 import { UnshieldModal } from "../components/PrivacyModals/UnshieldModal";
 import { TransferModal } from "../components/PrivacyModals/TransferModal";
 import { ZkProofLoader } from "../components/PrivacyModals/ZkProofLoader";
-import { AddTokenModal } from "../components/AddTokenModal";
 
+import { AddTokenModal } from "../components/AddTokenModal";
 
 interface Account {
     address: string;
@@ -48,6 +48,17 @@ interface BalanceResponse {
     balance_eth: string;
     symbol: string;
 }
+
+const formatBalance = (bal: string | undefined) => {
+    if (!bal) return "0.00";
+    const num = parseFloat(bal);
+    if (isNaN(num) || num === 0) return "0.00";
+    if (Number.isInteger(num)) return num.toLocaleString();
+    return parseFloat(num.toFixed(6)).toLocaleString(undefined, {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 6
+    });
+};
 
 export default function Dashboard() {
     const queryClient = useQueryClient();
@@ -198,13 +209,6 @@ export default function Dashboard() {
         enabled: !!network,
     });
 
-    const formatBalance = (bal: string | undefined) => {
-        if (!bal) return "0.00";
-        const num = parseFloat(bal);
-        if (num === 0) return "0.00";
-        if (Number.isInteger(num)) return num.toString();
-        return parseFloat(num.toFixed(6)).toString();
-    };
 
     const displayBalance = isShieldMode ? "0.00" : formatBalance(balance?.balance_eth);
     const displaySymbol = isShieldMode ? `${balance?.symbol || "ETH"} (zk)` : balance?.symbol || "ETH";
@@ -479,14 +483,12 @@ function SelectedTokenDisplay({ token, account }: { token: TrackedToken; account
         enabled: !!account,
     });
 
-    const bal = balanceData?.balance_formatted
-        ? parseFloat(parseFloat(balanceData.balance_formatted).toFixed(6)).toString()
-        : "0.00";
-
     return (
         <div className="w-full px-4 py-2 grid grid-cols-2 items-center">
             <span className="font-bold text-left">{token.symbol}</span>
-            <span className="text-muted-foreground text-right">{bal}</span>
+            <span className="text-muted-foreground text-right">
+                {formatBalance(balanceData?.balance_formatted)}
+            </span>
         </div>
     );
 }
@@ -498,6 +500,7 @@ function TokenRow({ token, account, isSelected, onSelect }: {
     onSelect?: () => void;
 }) {
     const [copied, setCopied] = useState(false);
+    const [isHovered, setIsHovered] = useState(false);
 
     const { data: balanceData, isLoading } = useQuery({
         queryKey: ["token_balance", token.address, account],
@@ -506,13 +509,6 @@ function TokenRow({ token, account, isSelected, onSelect }: {
         refetchInterval: 60000,
     });
 
-    const formatTokenBalance = (bal: string | undefined) => {
-        if (!bal) return "0.00";
-        const num = parseFloat(bal);
-        if (isNaN(num) || num === 0) return "0.00";
-        if (Number.isInteger(num)) return num.toLocaleString();
-        return parseFloat(num.toFixed(6)).toString();
-    };
 
     const handleContextMenu = async (e: React.MouseEvent) => {
         e.preventDefault();
@@ -529,16 +525,33 @@ function TokenRow({ token, account, isSelected, onSelect }: {
         <button
             onClick={onSelect}
             onContextMenu={handleContextMenu}
-            className={`w-full px-4 py-2 grid grid-cols-2 items-center text-sm border-b border-border/50 last:border-0 hover:bg-secondary transition-colors text-left ${isSelected ? "bg-secondary/50" : ""}`}
-            title="Right click to copy address"
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+            className={`w-full px-4 py-2 flex items-center text-sm border-b border-border/50 last:border-0 hover:bg-secondary transition-colors relative h-10 ${isSelected ? "bg-secondary/50" : ""}`}
         >
-            <span className="font-bold flex items-center gap-2">
-                {token.symbol}
-                {copied && <span className="text-xs text-green-500 font-normal">Copied!</span>}
-            </span>
-            <span className="text-muted-foreground text-right">
-                {isLoading ? "..." : formatTokenBalance(balanceData?.balance_formatted)}
-            </span>
+            {/* Ticker - Fixed Left */}
+            <span className="font-bold truncate shrink-0 z-20 bg-inherit pr-2">{token.symbol}</span>
+
+            {/* Address - Absolutely Centered */}
+            <ColoredAddress
+                address={token.address}
+                className="absolute left-1/2 -translate-x-1/2 opacity-80 whitespace-nowrap px-1 overflow-visible pointer-events-none text-[14px]"
+            />
+
+            {/* Balance Overlay - Fixed Right */}
+            {isHovered && (
+                <div className="absolute top-0 right-0 h-full flex items-center pl-6 pr-4 bg-gradient-to-l from-secondary via-secondary to-transparent z-30 animate-in fade-in duration-200">
+                    <span className="text-muted-foreground text-right tabular-nums whitespace-nowrap">
+                        {isLoading ? "..." : formatBalance(balanceData?.balance_formatted)}
+                    </span>
+                </div>
+            )}
+
+            {copied && (
+                <div className="absolute inset-0 bg-background/90 flex items-center justify-center z-40 animate-in fade-in duration-200">
+                    <span className="text-sm text-green-500 font-medium font-mono">Copied: {token.address}</span>
+                </div>
+            )}
         </button>
     );
 }
