@@ -24,10 +24,11 @@ Be respectful, professional, and constructive. We're building a secure wallet th
 ```bash
 # Fork and clone the repository
 git clone https://github.com/YOUR_USERNAME/Vaughan-Tauri.git
-cd Vaughan-Tauri
+cd Vaughan-Tauri/Vaughan
 
-# Install dependencies
+# Install shell and frontend dependencies
 npm install
+npm install --prefix web
 
 # Run in development mode
 cargo tauri dev
