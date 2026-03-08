@@ -322,6 +322,14 @@
     }
 
     /**
+     * Legacy enable method
+     */
+    async enable() {
+      console.log('[Vaughan-Provider] Legacy enable() called');
+      return this.request({ method: 'eth_requestAccounts' });
+    }
+
+    /**
      * Legacy sendAsync method
      */
     sendAsync(payload, callback) {
