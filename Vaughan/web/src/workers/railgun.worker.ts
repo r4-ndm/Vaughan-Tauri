@@ -136,6 +136,8 @@ ctx.addEventListener('message', async (event: MessageEvent<RailgunWorkerRequest>
                         case 137: networkName = NetworkName.Polygon; break;
                         case 56: networkName = NetworkName.BNBChain; break;
                         case 42161: networkName = NetworkName.Arbitrum; break;
+                        case 11155111: networkName = NetworkName.EthereumSepolia; break; // Railgun Testnet
+                        case 80002: networkName = NetworkName.PolygonAmoy; break; // Railgun Testnet
                         case 369:
                         case 943:
                             // Custom networks require custom configurations in Railgun,
@@ -153,6 +155,8 @@ ctx.addEventListener('message', async (event: MessageEvent<RailgunWorkerRequest>
                         137: ['http://localhost:1420/rpc/polygon', 'http://localhost:1420/rpc/polygon2'],
                         56: ['http://localhost:1420/rpc/bsc', 'http://localhost:1420/rpc/bsc2'],
                         42161: ['http://localhost:1420/rpc/arb', 'http://localhost:1420/rpc/arb2'],
+                        11155111: ['https://ethereum-sepolia-rpc.publicnode.com', 'https://1rpc.io/sepolia'],
+                        80002: ['https://polygon-amoy-bor-rpc.publicnode.com', 'https://rpc-amoy.polygon.technology'],
                         369: ['http://localhost:1420/rpc/pulse', 'http://localhost:1420/rpc/pulse2'],
                         943: ['http://localhost:1420/rpc/pulse-test', 'http://localhost:1420/rpc/pulse-test2'],
                     };

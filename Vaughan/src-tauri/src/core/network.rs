@@ -484,6 +484,36 @@ impl NetworkService {
                 },
                 is_testnet: true,
             },
+            // Ethereum Sepolia (Railgun Testnet)
+            NetworkConfig {
+                id: "sepolia".to_string(),
+                name: "Ethereum Sepolia".to_string(),
+                chain_type: ChainType::Evm,
+                chain_id: 11155111,
+                rpc_url: "https://ethereum-sepolia-rpc.publicnode.com".to_string(),
+                explorer_url: Some("https://sepolia.etherscan.io".to_string()),
+                native_token: TokenInfo {
+                    symbol: "ETH".to_string(),
+                    name: "Sepolia Ether".to_string(),
+                    decimals: 18,
+                },
+                is_testnet: true,
+            },
+            // Polygon Amoy (Railgun Testnet)
+            NetworkConfig {
+                id: "polygon-amoy".to_string(),
+                name: "Polygon Amoy".to_string(),
+                chain_type: ChainType::Evm,
+                chain_id: 80002,
+                rpc_url: "https://polygon-amoy-bor-rpc.publicnode.com".to_string(),
+                explorer_url: Some("https://amoy.polygonscan.com".to_string()),
+                native_token: TokenInfo {
+                    symbol: "MATIC".to_string(),
+                    name: "Amoy Matic".to_string(),
+                    decimals: 18,
+                },
+                is_testnet: true,
+            },
         ]
     }
 
