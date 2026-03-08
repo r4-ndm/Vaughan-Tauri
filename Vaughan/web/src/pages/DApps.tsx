@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, ExternalLink, Globe, Search } from "lucide-react";
+import { ArrowLeft, ExternalLink, Globe, Search, Plus } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Layout } from "../components/Layout";
 import { NetworkSelector } from "../components/NetworkSelector";
@@ -40,7 +40,7 @@ interface NetworkInfo {
 }
 
 // Convert WHITELISTED_DAPPS to DApp interface
-const dapps: DApp[] = WHITELISTED_DAPPS.map(dapp => ({
+const coreDapps: DApp[] = WHITELISTED_DAPPS.map(dapp => ({
     name: dapp.name,
     url: dapp.url,
     description: dapp.description,
@@ -57,6 +57,21 @@ export default function DApps() {
     const [activeAccount, setActiveAccount] = useState<string | null>(null);
     const [customUrl, setCustomUrl] = useState<string>("");
     const [isLaunchingCustom, setIsLaunchingCustom] = useState(false);
+
+    // State for user's custom dApps loaded from localStorage
+    const [customDapps, setCustomDapps] = useState<DApp[]>([]);
+
+    // Load custom dApps on mount
+    useEffect(() => {
+        try {
+            const stored = localStorage.getItem('vaughan_custom_dapps');
+            if (stored) {
+                setCustomDapps(JSON.parse(stored));
+            }
+        } catch (e) {
+            console.error("Failed to load custom dApps:", e);
+        }
+    }, []);
 
     const { data: network, isLoading: isNetworkLoading } = useQuery({
         queryKey: ["network"],
@@ -132,15 +147,49 @@ export default function DApps() {
         }
     };
 
+    const formatUrl = (url: string) => {
+        let formattedUrl = url.trim();
+        if (!/^https?:\/\//i.test(formattedUrl)) {
+            formattedUrl = `https://${formattedUrl}`;
+        }
+        return formattedUrl;
+    };
+
+    const handleAddCustomDapp = (e: React.MouseEvent) => {
+        e.preventDefault();
+        if (!customUrl.trim()) return;
+
+        const formattedUrl = formatUrl(customUrl);
+
+        try {
+            const parsedUrl = new URL(formattedUrl);
+            const newDapp: DApp = {
+                name: parsedUrl.hostname,
+                url: formattedUrl,
+                description: "Custom user-added dApp",
+                category: "Custom",
+                chains: [] // Empty chains array means it's available on all networks
+            };
+
+            // Check for duplicates
+            if (!customDapps.some(d => d.url === formattedUrl) && !coreDapps.some(d => d.url === formattedUrl)) {
+                const updatedList = [...customDapps, newDapp];
+                setCustomDapps(updatedList);
+                localStorage.setItem('vaughan_custom_dapps', JSON.stringify(updatedList));
+                setCustomUrl(""); // Clear input on success
+            } else {
+                alert("This dApp is already in your list.");
+            }
+        } catch (error) {
+            alert("Please enter a valid URL.");
+        }
+    };
+
     const handleCustomUrlSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!customUrl.trim()) return;
 
-        let formattedUrl = customUrl.trim();
-        // Auto prepending https:// if not present
-        if (!/^https?:\/\//i.test(formattedUrl)) {
-            formattedUrl = `https://${formattedUrl}`;
-        }
+        const formattedUrl = formatUrl(customUrl);
 
         setIsLaunchingCustom(true);
         try {
@@ -149,7 +198,7 @@ export default function DApps() {
                 url: formattedUrl,
                 title: new URL(formattedUrl).hostname // Use domain as title
             });
-            setCustomUrl(""); // Clear input on success
+            // We do not save to list automatically on launch, user must click +
         } catch (error) {
             console.error("Failed to open custom URL:", error);
             alert(`Failed to open custom URL: ${error}`);
@@ -168,9 +217,12 @@ export default function DApps() {
         );
     }
 
-    const filteredDapps = network
-        ? dapps.filter(dapp => dapp.chains.includes(network.chain_id))
-        : dapps;
+    // Combine core dApps (filtered by network) with all custom dApps
+    const filteredCoreDapps = network
+        ? coreDapps.filter(dapp => dapp.chains.includes(network.chain_id))
+        : coreDapps;
+
+    const combinedDapps = [...customDapps, ...filteredCoreDapps];
 
     const getDAppIcon = (dapp: any) => {
         // If it's a URL or path, use it directly
@@ -181,6 +233,13 @@ export default function DApps() {
         // Use the hostname for the favicon service
         const hostname = new URL(dapp.url).hostname;
         return `https://www.google.com/s2/favicons?domain=${hostname}&sz=128`;
+    };
+
+    const handleRemoveCustomDapp = (e: React.MouseEvent, urlToRemove: string) => {
+        e.stopPropagation();
+        const updatedList = customDapps.filter(d => d.url !== urlToRemove);
+        setCustomDapps(updatedList);
+        localStorage.setItem('vaughan_custom_dapps', JSON.stringify(updatedList));
     };
 
     return (
@@ -218,11 +277,11 @@ export default function DApps() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                    {filteredDapps.map((dapp) => (
+                    {combinedDapps.map((dapp) => (
                         <div
                             key={dapp.url}
                             onClick={() => handleOpenDApp(dapp)}
-                            className="bg-card border border-border rounded-xl p-4 hover:border-primary/50 hover:shadow-lg transition-all cursor-pointer group flex flex-col justify-between h-full"
+                            className="bg-card border border-border rounded-xl p-4 hover:border-primary/50 hover:shadow-lg transition-all cursor-pointer group flex flex-col justify-between h-full relative overflow-hidden"
                         >
                             <div className="space-y-2">
                                 <div className="flex justify-between items-start">
@@ -259,7 +318,7 @@ export default function DApps() {
                                 </div>
 
                                 <div>
-                                    <h3 className="text-base font-bold mb-1 group-hover:text-primary transition-colors truncate">{dapp.name}</h3>
+                                    <h3 className="text-base font-bold mb-1 group-hover:text-primary transition-colors truncate pr-6">{dapp.name}</h3>
                                     <p className="text-muted-foreground text-xs leading-tight line-clamp-2">{dapp.description}</p>
                                 </div>
                             </div>
@@ -278,6 +337,17 @@ export default function DApps() {
                                     <span className="truncate max-w-[80px]">{new URL(dapp.url).hostname}</span>
                                 </div>
                             </div>
+
+                            {/* Remove button for custom dApps */}
+                            {dapp.category === "Custom" && (
+                                <button
+                                    onClick={(e) => handleRemoveCustomDapp(e, dapp.url)}
+                                    className="absolute top-2 right-10 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-10"
+                                    title="Remove from your list"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+                                </button>
+                            )}
                         </div>
                     ))}
                 </div>
@@ -288,14 +358,20 @@ export default function DApps() {
                         onSubmit={handleCustomUrlSubmit}
                         className="bg-card border border-border rounded-xl p-2 flex items-center gap-2 focus-within:border-primary/50 focus-within:shadow-[0_0_15px_rgba(var(--primary),0.2)] transition-all"
                     >
-                        <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-secondary/50 text-muted-foreground shrink-0">
-                            <Globe className="w-5 h-5" />
-                        </div>
+                        <button
+                            type="button"
+                            onClick={handleAddCustomDapp}
+                            disabled={!customUrl.trim() || isLaunchingCustom}
+                            title="Add URL to your Custom dApps list"
+                            className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors shrink-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                        >
+                            <Plus className="w-5 h-5" />
+                        </button>
                         <input
                             type="text"
                             value={customUrl}
                             onChange={(e) => setCustomUrl(e.target.value)}
-                            placeholder="Enter any dApp URL (e.g., app.uniswap.org)..."
+                            placeholder="Type a URL and hit + to add, or Go to just launch..."
                             className="flex-1 bg-transparent border-none outline-none text-sm placeholder:text-muted-foreground/50 px-2"
                             disabled={isLaunchingCustom}
                         />
