@@ -79,8 +79,8 @@ pub fn generate_mnemonic(word_count: usize) -> Result<String, WalletError> {
 
     // Generate random entropy
     let mut entropy = vec![0u8; entropy_size];
-    use rand::RngCore;
-    rand::thread_rng().fill_bytes(&mut entropy);
+    use rand::{rngs::OsRng, RngCore};
+    OsRng.fill_bytes(&mut entropy);
 
     // Create mnemonic from entropy
     let mnemonic = Mnemonic::from_entropy_in(Language::English, &entropy)

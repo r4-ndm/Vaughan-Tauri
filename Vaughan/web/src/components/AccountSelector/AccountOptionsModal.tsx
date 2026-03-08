@@ -312,6 +312,27 @@ export function AccountOptionsModal({ isOpen, onClose, currentAddress, currentNa
                                                 await navigator.clipboard.writeText(exportValue);
                                                 setCopied(true);
                                                 setTimeout(() => setCopied(false), 2000);
+
+                                                // Security: Auto-clear clipboard after 60 seconds
+                                                setTimeout(async () => {
+                                                    try {
+                                                        // Attempt to read current clipboard to avoid clearing user's new copied data
+                                                        // If it fails (e.g., due to background permission), default to clearing it for safety
+                                                        let shouldClear = true;
+                                                        try {
+                                                            const current = await navigator.clipboard.readText();
+                                                            shouldClear = current === exportValue;
+                                                        } catch (e) {
+                                                            // Ignore read errors, proceed to clear
+                                                        }
+
+                                                        if (shouldClear) {
+                                                            await navigator.clipboard.writeText('');
+                                                        }
+                                                    } catch (err) {
+                                                        console.error('Failed to clear clipboard', err);
+                                                    }
+                                                }, 60000);
                                             }}
                                             className="w-full py-2.5 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
                                         >
