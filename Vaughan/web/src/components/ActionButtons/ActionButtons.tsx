@@ -131,6 +131,14 @@ export function CreateWalletModal({ onClose }: { onClose: () => void }) {
 
     const handleFinish = async () => {
         await invoke('unlock_wallet', { password }).catch(() => { });
+
+        // Load the Railgun engine since the user just got into the app for the first time
+        import('../../services/railgunWorkerClient').then(({ railgunClient }) => {
+            railgunClient.loadWallet(password).catch(e => {
+                console.error("[Onboarding] Failed to load Railgun wallet:", e);
+            });
+        });
+
         queryClient.invalidateQueries({ queryKey: ['accounts'] });
         queryClient.invalidateQueries({ queryKey: ['balance'] });
         onClose();

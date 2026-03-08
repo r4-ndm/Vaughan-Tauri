@@ -137,8 +137,8 @@ class RailgunWorkerClient {
         return res.payload;
     }
 
-    // Railgun-supported chain IDs (+ PulseChain custom support)
-    private static SUPPORTED_CHAINS = new Set([1, 56, 137, 42161, 369, 943]);
+    // Railgun-supported chain IDs (+ PulseChain custom support + Testnets)
+    private static SUPPORTED_CHAINS = new Set([1, 56, 137, 42161, 369, 943, 11155111, 80002]);
 
     public async setNetwork(chainId: number): Promise<void> {
         if (!RailgunWorkerClient.SUPPORTED_CHAINS.has(chainId)) {

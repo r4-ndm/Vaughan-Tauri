@@ -40,6 +40,17 @@ export default function Unlock() {
             }
 
             await invoke("unlock_wallet", { password });
+
+            // Initialize railgun wallet right after a successful unlock if privacy is enabled
+            if (privacyEnabled) {
+                console.log("[Unlock] Loading Railgun wallet...");
+                import('../services/railgunWorkerClient').then(({ railgunClient }) => {
+                    railgunClient.loadWallet(password).catch(e => {
+                        console.error("[Unlock] Failed to load Railgun wallet:", e);
+                    });
+                });
+            }
+
             navigate("/dashboard");
         } catch (err) {
             setError(err as string);
