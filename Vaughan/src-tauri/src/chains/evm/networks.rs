@@ -201,6 +201,34 @@ pub fn pulsechain_testnet_v4() -> EvmNetworkConfig {
     .with_explorer_api("https://api.scan.v4.testnet.pulsechain.com/api".to_string())
 }
 
+/// Get Ethereum Sepolia configuration
+pub fn ethereum_sepolia() -> EvmNetworkConfig {
+    EvmNetworkConfig::new(
+        "sepolia".to_string(),
+        "Ethereum Sepolia".to_string(),
+        11155111,
+        "https://ethereum-sepolia-rpc.publicnode.com".to_string(),
+        "ETH".to_string(),
+        "Sepolia Ether".to_string(),
+    )
+    .with_explorer("https://sepolia.etherscan.io".to_string())
+    .with_explorer_api("https://api-sepolia.etherscan.io/api".to_string())
+}
+
+/// Get Polygon Amoy configuration
+pub fn polygon_amoy() -> EvmNetworkConfig {
+    EvmNetworkConfig::new(
+        "polygon-amoy".to_string(),
+        "Polygon Amoy".to_string(),
+        80002,
+        "https://polygon-amoy-bor-rpc.publicnode.com".to_string(),
+        "MATIC".to_string(),
+        "Amoy Matic".to_string(),
+    )
+    .with_explorer("https://amoy.polygonscan.com".to_string())
+    .with_explorer_api("https://api-amoy.polygonscan.com/api".to_string())
+}
+
 // ============================================================================
 // Network Registry
 // ============================================================================
@@ -209,9 +237,11 @@ pub fn pulsechain_testnet_v4() -> EvmNetworkConfig {
 pub fn all_networks() -> Vec<EvmNetworkConfig> {
     vec![
         ethereum_mainnet(),
+        ethereum_sepolia(),
         pulsechain_mainnet(),
         pulsechain_testnet_v4(),
         polygon_mainnet(),
+        polygon_amoy(),
         bsc_mainnet(),
         arbitrum_one(),
         optimism_mainnet(),
@@ -224,9 +254,11 @@ pub fn all_networks() -> Vec<EvmNetworkConfig> {
 pub fn get_network(id: &str) -> Option<EvmNetworkConfig> {
     match id {
         "ethereum" => Some(ethereum_mainnet()),
+        "sepolia" => Some(ethereum_sepolia()),
         "pulsechain" => Some(pulsechain_mainnet()),
         "pulsechain-testnet-v4" => Some(pulsechain_testnet_v4()),
         "polygon" => Some(polygon_mainnet()),
+        "polygon-amoy" => Some(polygon_amoy()),
         "bsc" => Some(bsc_mainnet()),
         "arbitrum" => Some(arbitrum_one()),
         "optimism" => Some(optimism_mainnet()),
@@ -240,9 +272,11 @@ pub fn get_network(id: &str) -> Option<EvmNetworkConfig> {
 pub fn get_network_by_chain_id(chain_id: u64) -> Option<EvmNetworkConfig> {
     match chain_id {
         1 => Some(ethereum_mainnet()),
+        11155111 => Some(ethereum_sepolia()),
         369 => Some(pulsechain_mainnet()),
         943 => Some(pulsechain_testnet_v4()),
         137 => Some(polygon_mainnet()),
+        80002 => Some(polygon_amoy()),
         56 => Some(bsc_mainnet()),
         42161 => Some(arbitrum_one()),
         10 => Some(optimism_mainnet()),
