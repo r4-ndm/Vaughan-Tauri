@@ -64,7 +64,9 @@ export function TransferModal({
                 : chainId === 137 ? 'Polygon'
                     : chainId === 56 ? 'BNBChain'
                         : chainId === 42161 ? 'Arbitrum'
-                            : 'Ethereum';
+                            : chainId === 11155111 ? 'EthereumSepolia'
+                                : chainId === 80002 ? 'PolygonAmoy'
+                                    : 'Ethereum';
 
             const txResponse = await railgunClient.generateTransferTransaction(
                 networkNameStr,
