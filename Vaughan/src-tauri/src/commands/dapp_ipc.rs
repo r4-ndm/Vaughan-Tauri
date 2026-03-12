@@ -2,6 +2,7 @@ use crate::dapp;
 ///! dApp IPC Command Handler
 ///!
 ///! Handles RPC requests from dApps via Tauri IPC (postMessage bridge)
+use crate::error::AnyJson;
 use crate::state::VaughanState;
 use serde_json::Value;
 use tauri::State;
@@ -25,14 +26,16 @@ use tauri::State;
 /// * `Err(String)` - Error message
 ///
 #[tauri::command]
+#[specta::specta]
 pub async fn handle_dapp_request(
     app: tauri::AppHandle,
     state: State<'_, VaughanState>,
     window_label: String,
     origin: String,
     method: String,
-    params: Vec<Value>,
-) -> Result<Value, String> {
+    params: Vec<AnyJson>,
+) -> Result<AnyJson, String> {
+    let params: Vec<Value> = params.into_iter().map(|a| a.0).collect();
     eprintln!(
         "[dApp-IPC] Request - window_label: '{}', origin: '{}', method: {}, params: {:?}",
         window_label, origin, method, params
@@ -46,7 +49,7 @@ pub async fn handle_dapp_request(
     match result {
         Ok(value) => {
             eprintln!("[dApp-IPC] Success: {:?}", value);
-            Ok(value)
+            Ok(AnyJson(value))
         },
         Err(e) => {
             eprintln!("[dApp-IPC] Error: {}", e);

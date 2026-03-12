@@ -22,8 +22,8 @@
 //! - `import_account` - Import account from private key
 //! - `delete_account` - Delete account
 
-use crate::core::Account;
 use crate::error::WalletError;
+use crate::models::wallet::AccountExport;
 use crate::state::VaughanState;
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -57,6 +57,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 /// console.log('BACKUP THIS MNEMONIC:', mnemonic);
 /// ```
 #[tauri::command]
+#[specta::specta]
 pub async fn create_wallet(
     state: State<'_, VaughanState>,
     password: String,
@@ -74,10 +75,15 @@ pub async fn create_wallet(
     }
 
     // Create wallet
-    state
+    let mnemonic = state
         .wallet_service
         .create_wallet(&password, word_count)
-        .await
+        .await?;
+
+    // Persist initial accounts
+    let _ = state.save_state().await;
+
+    Ok(mnemonic)
 }
 
 /// Import wallet from BIP-39 mnemonic
@@ -105,6 +111,7 @@ pub async fn create_wallet(
 /// });
 /// ```
 #[tauri::command]
+#[specta::specta]
 pub async fn import_wallet(
     state: State<'_, VaughanState>,
     mnemonic: String,
@@ -134,6 +141,9 @@ pub async fn import_wallet(
         .import_wallet(&mnemonic, &password, account_count)
         .await?;
 
+    // Persist initial accounts
+    let _ = state.save_state().await;
+
     // Convert addresses to strings
     Ok(addresses.iter().map(|addr| addr.to_string()).collect())
 }
@@ -153,6 +163,7 @@ pub async fn import_wallet(
 /// await invoke('unlock_wallet', { password: 'my_password' });
 /// ```
 #[tauri::command]
+#[specta::specta]
 pub async fn unlock_wallet(
     state: State<'_, VaughanState>,
     password: String,
@@ -175,6 +186,7 @@ pub async fn unlock_wallet(
 /// await invoke('lock_wallet');
 /// ```
 #[tauri::command]
+#[specta::specta]
 pub async fn lock_wallet(state: State<'_, VaughanState>) -> Result<(), WalletError> {
     state.lock_wallet().await;
     Ok(())
@@ -195,6 +207,7 @@ pub async fn lock_wallet(state: State<'_, VaughanState>) -> Result<(), WalletErr
 /// }
 /// ```
 #[tauri::command]
+#[specta::specta]
 pub async fn is_wallet_locked(state: State<'_, VaughanState>) -> Result<bool, WalletError> {
     Ok(state.is_locked().await)
 }
@@ -214,6 +227,7 @@ pub async fn is_wallet_locked(state: State<'_, VaughanState>) -> Result<bool, Wa
 /// }
 /// ```
 #[tauri::command]
+#[specta::specta]
 pub async fn wallet_exists(state: State<'_, VaughanState>) -> Result<bool, WalletError> {
     Ok(state.wallet_service.wallet_exists())
 }
@@ -235,8 +249,10 @@ pub async fn wallet_exists(state: State<'_, VaughanState>) -> Result<bool, Walle
 /// });
 /// ```
 #[tauri::command]
-pub async fn get_accounts(state: State<'_, VaughanState>) -> Result<Vec<Account>, WalletError> {
-    state.wallet_service.get_accounts().await
+#[specta::specta]
+pub async fn get_accounts(state: State<'_, VaughanState>) -> Result<Vec<AccountExport>, WalletError> {
+    let accounts = state.wallet_service.get_accounts().await?;
+    Ok(accounts.into_iter().map(AccountExport::from).collect())
 }
 
 /// Create new HD account
@@ -261,15 +277,18 @@ pub async fn get_accounts(state: State<'_, VaughanState>) -> Result<Vec<Account>
 /// console.log('New account:', account.address);
 /// ```
 #[tauri::command]
+#[specta::specta]
 pub async fn create_account(
     state: State<'_, VaughanState>,
     password: String,
-) -> Result<Account, WalletError> {
+) -> Result<AccountExport, WalletError> {
     if password.is_empty() {
         return Err(WalletError::InvalidPassword);
     }
 
-    state.wallet_service.create_account(&password).await
+    let account = state.wallet_service.create_account(&password).await?;
+    let _ = state.save_state().await;
+    Ok(AccountExport::from(account))
 }
 
 /// Import account from private key
@@ -303,12 +322,13 @@ pub async fn create_account(
 /// });
 /// ```
 #[tauri::command]
+#[specta::specta]
 pub async fn import_account(
     state: State<'_, VaughanState>,
     private_key: String,
     name: String,
     password: String,
-) -> Result<Account, WalletError> {
+) -> Result<AccountExport, WalletError> {
     // Validate inputs
     if password.is_empty() {
         return Err(WalletError::InvalidPassword);
@@ -342,10 +362,13 @@ pub async fn import_account(
         ));
     }
 
-    state
+    let account = state
         .wallet_service
         .import_account(private_key, name, &password)
-        .await
+        .await?;
+
+    let _ = state.save_state().await;
+    Ok(AccountExport::from(account))
 }
 
 /// Delete account
@@ -366,6 +389,7 @@ pub async fn import_account(
 /// });
 /// ```
 #[tauri::command]
+#[specta::specta]
 pub async fn delete_account(
     state: State<'_, VaughanState>,
     address: String,
@@ -383,7 +407,9 @@ pub async fn delete_account(
         ));
     }
 
-    state.wallet_service.delete_account(&address).await
+    state.wallet_service.delete_account(&address).await?;
+    let _ = state.save_state().await;
+    Ok(())
 }
 
 /// Rename an account
@@ -401,6 +427,7 @@ pub async fn delete_account(
 /// * `Ok(())` - Account renamed successfully
 /// * `Err(WalletError)` - If renaming fails, password invalid, or account doesn't exist
 #[tauri::command]
+#[specta::specta]
 pub async fn rename_account(
     state: State<'_, VaughanState>,
     address: String,
@@ -418,7 +445,10 @@ pub async fn rename_account(
     state
         .wallet_service
         .rename_account(&parsed_address, new_name, &password)
-        .await
+        .await?;
+
+    let _ = state.save_state().await;
+    Ok(())
 }
 
 /// Export private key for an account
@@ -435,6 +465,7 @@ pub async fn rename_account(
 /// * `Ok(String)` - Hex encoded private key with 0x prefix
 /// * `Err(WalletError)` - If export fails
 #[tauri::command]
+#[specta::specta]
 pub async fn export_private_key(
     state: State<'_, VaughanState>,
     address: String,
@@ -492,6 +523,7 @@ mod tests {
 /// });
 /// ```
 #[tauri::command]
+#[specta::specta]
 pub async fn set_active_account(
     app: AppHandle,
     state: State<'_, VaughanState>,
@@ -577,6 +609,7 @@ pub async fn set_active_account(
 /// // Show to user — 12 or 24 space-separated words
 /// ```
 #[tauri::command]
+#[specta::specta]
 pub async fn export_mnemonic(
     state: State<'_, VaughanState>,
     password: String,
@@ -597,6 +630,7 @@ pub async fn export_mnemonic(
 /// - Requires password to unlock the master seed from the OS keychain.
 /// - Sent solely to the secure WebWorker context on the frontend.
 #[tauri::command]
+#[specta::specta]
 pub async fn get_railgun_mnemonic(
     state: State<'_, VaughanState>,
     password: String,
@@ -613,6 +647,7 @@ pub async fn get_railgun_mnemonic(
 ///
 /// * `asset` - Asset identifier ("native" or token address)
 #[tauri::command]
+#[specta::specta]
 pub async fn set_focused_asset(
     state: State<'_, VaughanState>,
     asset: String,

@@ -1,5 +1,6 @@
 use rodio::{Decoder, OutputStream, Sink};
 use serde::{Deserialize, Serialize};
+use specta::Type;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
@@ -7,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 /// Sound alert types
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Type)]
 pub enum AlertSound {
     TransactionIncoming,
     TransactionConfirmed,
@@ -23,7 +24,7 @@ pub enum AlertSound {
 }
 
 /// Sound configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct SoundConfig {
     pub enabled: bool,
     pub volume: f32,        // 0.0 to 1.0

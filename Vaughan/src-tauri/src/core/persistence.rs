@@ -19,7 +19,10 @@
 
 use crate::core::network::NetworkConfig;
 use crate::error::WalletError;
+use crate::models::token::TrackedToken;
+use crate::models::wallet::Account;
 use serde::{Deserialize, Serialize};
+use specta::Type;
 use std::fs;
 use std::path::PathBuf;
 
@@ -30,7 +33,7 @@ const STATE_VERSION: u32 = 1;
 const STATE_FILE: &str = "state.json";
 
 /// User preferences
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct UserPreferences {
     /// Whether sound alerts are enabled
     pub sound_enabled: bool,
@@ -64,11 +67,6 @@ impl Default for UserPreferences {
 ///
 /// This struct is serialized to JSON and saved to disk.
 /// It contains everything needed to restore the app to its previous state.
-use crate::models::token::TrackedToken;
-
-// ... (existing imports)
-
-/// Persisted application state
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersistedState {
     /// Schema version for forward-compatible migrations
@@ -85,6 +83,10 @@ pub struct PersistedState {
 
     /// Last active account address (0x...)
     pub active_account: Option<String>,
+
+    /// List of accounts in the wallet
+    #[serde(default)]
+    pub accounts: Vec<Account>,
 
     /// User-added custom network configurations
     pub custom_networks: Vec<NetworkConfig>,
@@ -105,6 +107,7 @@ impl Default for PersistedState {
             active_network_rpc: Some("https://rpc.v4.testnet.pulsechain.com".to_string()),
             active_network_chain_id: Some(943),
             active_account: None,
+            accounts: Vec::new(),
             custom_networks: Vec::new(),
             tracked_tokens: Vec::new(),
             preferences: UserPreferences::default(),

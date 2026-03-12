@@ -8,6 +8,7 @@
 // ============================================================================
 
 use serde::{Deserialize, Serialize};
+use specta::Type;
 use std::fmt;
 
 // ============================================================================
@@ -15,7 +16,7 @@ use std::fmt;
 // ============================================================================
 
 /// Supported blockchain types
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Type)]
 pub enum ChainType {
     /// Ethereum Virtual Machine compatible chains
     Evm,
@@ -327,6 +328,12 @@ impl Signature {
     pub fn with_recovery_id(mut self, recovery_id: u8) -> Self {
         self.recovery_id = Some(recovery_id);
         self
+    }
+}
+
+impl fmt::Display for Signature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.bytes)
     }
 }
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Routes, Route, useNavigate } from "react-router-dom";
-import { invoke } from "@tauri-apps/api/core";
+import { WalletService } from "./services/tauri";
 import Unlock from "./pages/Unlock";
 import Onboarding from "./pages/Onboarding";
 import Dashboard from "./pages/Dashboard";
@@ -17,7 +17,7 @@ function Home() {
   const handleGetStarted = async () => {
     setLoading(true);
     try {
-      const exists = await invoke("wallet_exists");
+      const exists = await WalletService.walletExists();
       if (exists) {
         navigate("/unlock");
       } else {

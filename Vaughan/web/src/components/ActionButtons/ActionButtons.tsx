@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { WalletService } from '../../services/tauri';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Copy, Check, X } from 'lucide-react';
@@ -94,7 +94,7 @@ export function CreateWalletModal({ onClose }: { onClose: () => void }) {
 
     // Detect if a wallet already exists
     useEffect(() => {
-        invoke<boolean>('wallet_exists').then(setWalletExists).catch(() => setWalletExists(false));
+        WalletService.walletExists().then(setWalletExists).catch(() => setWalletExists(false));
     }, []);
 
     // ── Path A: wallet exists → add HD account ──────────────────────────────
@@ -102,7 +102,7 @@ export function CreateWalletModal({ onClose }: { onClose: () => void }) {
         if (!password) { setError('Enter your wallet password'); return; }
         setLoading(true); setError('');
         try {
-            await invoke('create_account', { password });
+            await WalletService.createAccount(password);
             queryClient.invalidateQueries({ queryKey: ['accounts'] });
             queryClient.invalidateQueries({ queryKey: ['balance'] });
             onClose();
@@ -119,7 +119,7 @@ export function CreateWalletModal({ onClose }: { onClose: () => void }) {
         if (password !== confirm) { setError('Passwords do not match'); return; }
         setLoading(true); setError('');
         try {
-            const phrase = await invoke<string>('create_wallet', { password, wordCount });
+            const phrase = await WalletService.createWallet(password, wordCount);
             setMnemonic(phrase);
             setStep('phrase');
         } catch (e: any) {
@@ -130,7 +130,7 @@ export function CreateWalletModal({ onClose }: { onClose: () => void }) {
     };
 
     const handleFinish = async () => {
-        await invoke('unlock_wallet', { password }).catch(() => { });
+        await WalletService.unlockWallet(password).catch(() => { });
 
         // Load the Railgun engine since the user just got into the app for the first time
         import('../../services/railgunWorkerClient').then(({ railgunClient }) => {
@@ -248,8 +248,8 @@ export function ImportWalletForm({ onClose }: { onClose: () => void }) {
         if (password !== confirm) { setError('Passwords do not match'); return; }
         setLoading(true); setError('');
         try {
-            await invoke('import_wallet', { mnemonic: mnemonic.trim().toLowerCase(), password, accountCount: 1 });
-            await invoke('unlock_wallet', { password }).catch(() => { });
+            await WalletService.importWallet(mnemonic.trim().toLowerCase(), password, 1);
+            await WalletService.unlockWallet(password).catch(() => { });
             queryClient.invalidateQueries({ queryKey: ['accounts'] });
             queryClient.invalidateQueries({ queryKey: ['balance'] });
             onClose();
@@ -314,11 +314,7 @@ export function ImportAccountForm({ onClose }: { onClose: () => void }) {
         setLoading(true); setError('');
 
         try {
-            await invoke('import_account', {
-                privateKey: privateKey.trim(),
-                name: name.trim() || 'Imported Account',
-                password
-            });
+            await WalletService.importAccount(privateKey.trim(), name.trim() || 'Imported Account', password);
 
             // Success - refresh UI and close
             queryClient.invalidateQueries({ queryKey: ['accounts'] });
@@ -453,7 +449,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
     // Fetch whether the wallet is initialized directly
     const { data: walletExists } = useQuery({
         queryKey: ["wallet_exists"],
-        queryFn: async () => invoke<boolean>("wallet_exists"),
+        queryFn: () => WalletService.walletExists(),
     });
 
     return (

@@ -1,0 +1,44 @@
+name: Check bindings
+
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+
+jobs:
+  bindings:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libasound2-dev libgtk-3-dev xvfb
+
+      - name: Install frontend dependencies
+        run: npm install
+        working-directory: ./Vaughan
+
+      - name: Generate bindings
+        run: |
+          Xvfb :99 -screen 0 1024x768x24 &
+          export DISPLAY=:99
+          timeout 30 npm run gen:bindings || true
+        working-directory: ./Vaughan
+
+      - name: Check bindings are up to date
+        run: |
+          if ! git diff --quiet Vaughan/web/src/bindings/tauri-commands.ts; then
+            echo "Bindings are outdated. Run 'npm run gen:bindings' from Vaughan and commit the changes."
+            exit 1
+          fi

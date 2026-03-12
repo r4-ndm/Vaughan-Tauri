@@ -6,13 +6,16 @@
 //! Rust backend for network-related functionality.
 
 use crate::chains::ChainAdapter;
+use crate::error::AnyJson;
 use crate::state::VaughanState;
 use alloy::providers::Provider;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use specta::Type;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 /// Network switch request
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Type)]
 pub struct SwitchNetworkRequest {
     /// Network identifier (e.g., "ethereum-mainnet")
     pub network_id: String,
@@ -23,7 +26,7 @@ pub struct SwitchNetworkRequest {
 }
 
 /// Balance response
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Type)]
 pub struct BalanceResponse {
     /// Balance in wei (as string to avoid precision loss)
     pub balance_wei: String,
@@ -34,7 +37,7 @@ pub struct BalanceResponse {
 }
 
 /// Token info for network response
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Type)]
 pub struct TokenInfoResponse {
     /// Token symbol (e.g., "ETH", "PLS")
     pub symbol: String,
@@ -45,7 +48,7 @@ pub struct TokenInfoResponse {
 }
 
 /// Network info response
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Type)]
 pub struct NetworkInfoResponse {
     /// Network ID
     pub network_id: String,
@@ -90,6 +93,7 @@ pub struct NetworkInfoResponse {
 /// });
 /// ```
 #[tauri::command]
+#[specta::specta]
 pub async fn switch_network(
     app: AppHandle,
     state: State<'_, VaughanState>,
@@ -159,6 +163,7 @@ pub async fn switch_network(
 /// console.log(`Balance: ${balance.balance_eth} ${balance.symbol}`);
 /// ```
 #[tauri::command]
+#[specta::specta]
 pub async fn get_balance(
     state: State<'_, VaughanState>,
     address: String,
@@ -201,6 +206,7 @@ pub async fn get_balance(
 /// console.log(`Connected to: ${info.network_name} (Chain ID: ${info.chain_id})`);
 /// ```
 #[tauri::command]
+#[specta::specta]
 pub async fn get_network_info(
     state: State<'_, VaughanState>,
 ) -> Result<NetworkInfoResponse, String> {
@@ -255,6 +261,7 @@ pub async fn get_network_info(
 /// console.log(`Chain ID: ${chainId}`);
 /// ```
 #[tauri::command]
+#[specta::specta]
 pub async fn get_chain_id(state: State<'_, VaughanState>) -> Result<u64, String> {
     let adapter = state
         .current_adapter()
@@ -281,6 +288,7 @@ pub async fn get_chain_id(state: State<'_, VaughanState>) -> Result<u64, String>
 /// console.log(`Latest block: ${blockNumber}`);
 /// ```
 #[tauri::command]
+#[specta::specta]
 pub async fn get_block_number(state: State<'_, VaughanState>) -> Result<u64, String> {
     let adapter = state
         .current_adapter()
@@ -314,11 +322,100 @@ pub async fn get_block_number(state: State<'_, VaughanState>) -> Result<u64, Str
 /// console.log(`Supported networks: ${networks.length}`);
 /// ```
 #[tauri::command]
+#[specta::specta]
 pub async fn get_supported_networks(
     state: State<'_, VaughanState>,
 ) -> Result<Vec<crate::core::NetworkConfig>, String> {
     Ok(state.network_service.get_predefined_networks())
 }
+
+/// Generic RPC request bypass
+///
+/// Routes an RPC request to a specific chain via the backend's Alloy adapters.
+/// This bypasses frontend CORS restrictions.
+#[tauri::command]
+#[specta::specta]
+pub async fn eth_request(
+    state: State<'_, VaughanState>,
+    chain_id: u64,
+    method: String,
+    params: Vec<AnyJson>,
+) -> Result<AnyJson, String> {
+    let params: Vec<Value> = params.into_iter().map(|a| a.0).collect();
+    eprintln!("[eth_request] ➡️ Received request for chain {}: method={}, params_count={}", chain_id, method, params.len());
+
+    eprintln!("[eth_request] ⏳ Getting/Creating adapter for chain {}...", chain_id);
+    let adapter = state
+        .get_or_create_adapter_by_chain_id(chain_id)
+        .await
+        .map_err(|e| {
+            eprintln!("[eth_request] ❌ Failed to get adapter: {}", e);
+            e.user_message()
+        })?;
+    eprintln!("[eth_request] ✅ Adapter acquired. RPC URL: {}", adapter.rpc_url());
+
+    eprintln!("[eth_request] ⏳ Sending raw request to node...");
+    let result: Value = adapter
+        .raw_request(method.clone(), params)
+        .await
+        .map_err(|e| {
+            eprintln!("[eth_request] ❌ RPC request failed (method: {}, chain: {}): {}", method, chain_id, e);
+            format!("RPC request failed (chain_id: {}): {}", chain_id, e)
+        })?;
+
+    eprintln!("[eth_request] ✅ Request completed successfully. Result: {}", result);
+    Ok(AnyJson(result))
+}
+
+/// Generic HTTP proxy for whitelisted domains to bypass CORS in WebWorkers
+#[tauri::command]
+#[specta::specta]
+pub async fn proxy_request(
+    url: String,
+    method: String,
+    headers: Option<std::collections::HashMap<String, String>>,
+    body: Option<AnyJson>,
+) -> Result<AnyJson, String> {
+    eprintln!("[proxy_request] ➡️ Intercepted: {} {}", method, url);
+    
+    let client = reqwest::Client::new();
+    let mut rb = match method.as_str() {
+        "POST" => client.post(&url),
+        "GET" => client.get(&url),
+        "PUT" => client.put(&url),
+        _ => client.get(&url),
+    };
+
+    if let Some(h) = headers {
+        for (k, v) in h {
+            rb = rb.header(k, v);
+        }
+    }
+
+    if let Some(b) = body {
+        rb = rb.json(&b.0);
+    }
+
+    let response = rb.send().await.map_err(|e| {
+        eprintln!("[proxy_request] ❌ Request failed ({}): {}", url, e);
+        format!("Request failed: {}", e)
+    })?;
+
+    let status = response.status();
+    let text = response.text().await.map_err(|e| {
+        eprintln!("[proxy_request] ❌ Failed to read response body: {}", e);
+        format!("Failed to read response body: {}", e)
+    })?;
+
+    eprintln!("[proxy_request] ✅ Success ({}) - Length: {} bytes", status, text.len());
+
+    // Try to parse as JSON, otherwise return as a JSON string
+    match serde_json::from_str::<Value>(&text) {
+        Ok(json) => Ok(AnyJson(json)),
+        Err(_) => Ok(AnyJson(Value::String(text))),
+    }
+}
+
 
 // ============================================================================
 // Tests

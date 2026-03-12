@@ -59,11 +59,10 @@ fn validate_url(url: &str) -> Result<Url, String> {
 // Window Commands
 // ============================================================================
 
-/// Open dApp URL in native WebView window (DIRECT MODE - No Proxy)
+/// Open dApp URL in native WebView window
 ///
-/// Creates a new WebView window that loads external URL directly
-/// with provider script injected via initialization_script.
-/// Provider uses Tauri events to communicate with main window.
+/// Creates a new WebView window that loads external URL directly or via proxy.
+/// Provider script is injected via initialization_script (bypasses CSP).
 ///
 /// # Arguments
 ///
@@ -71,6 +70,7 @@ fn validate_url(url: &str) -> Result<Url, String> {
 /// * `state` - Application state
 /// * `url` - dApp URL to load (must be http:// or https://)
 /// * `title` - Optional window title
+/// * `use_proxy` - Whether to use the CSP-bypassing proxy (recommended for Opensea, Hyperliquid)
 ///
 /// # Returns
 ///
@@ -78,21 +78,37 @@ fn validate_url(url: &str) -> Result<Url, String> {
 /// * `Err(String)` - Failed to create window or invalid URL
 ///
 #[tauri::command]
+#[specta::specta]
 pub async fn open_dapp_window(
     app: AppHandle,
     state: State<'_, VaughanState>,
     url: String,
     title: Option<String>,
-    init_script: Option<String>,
+    use_proxy: Option<bool>,
 ) -> Result<String, String> {
-    eprintln!("[Window] Opening dApp window (direct mode): {}", url);
+    let use_proxy = use_proxy.unwrap_or(false);
+    eprintln!(
+        "[Window] Opening dApp window (proxy: {}): {}",
+        use_proxy, url
+    );
 
     // Validate URL
     let validated_url = validate_url(&url)?;
     eprintln!("[Window] URL validated: {}", validated_url);
 
-    // Create WebView URL (direct external URL)
-    let window_url = WebviewUrl::External(validated_url.clone());
+    // Determine target URL (direct or proxied)
+    let window_url = if use_proxy {
+        let proxy_url = format!(
+            "http://localhost:8765/proxy?url={}",
+            urlencoding::encode(&url)
+        );
+        eprintln!("[Window] Using proxy URL: {}", proxy_url);
+        WebviewUrl::External(
+            Url::parse(&proxy_url).map_err(|e| format!("Invalid proxy URL: {}", e))?,
+        )
+    } else {
+        WebviewUrl::External(validated_url.clone())
+    };
 
     // Generate unique window label
     let window_label = format!("dapp-{}", uuid::Uuid::new_v4());
@@ -101,59 +117,51 @@ pub async fn open_dapp_window(
     // Get origin for registration
     let origin = validated_url.origin().ascii_serialization();
 
-    // Use provided init_script or default to PROVIDER_SCRIPT_IPC (CSP-safe via Tauri IPC)
-    let provider_script = if let Some(script) = init_script {
-        eprintln!("[Window] Using custom init_script ({} bytes)", script.len());
-        format!(
-            r#"
-            // Inject window metadata for provider
-            window.__VAUGHAN_WINDOW_LABEL__ = "{}";
-            window.__VAUGHAN_ORIGIN__ = "{}";
-            
-            // Provider script
-            {}
-            "#,
-            window_label, origin, script
-        )
-    } else {
-        eprintln!("[Window] Using default PROVIDER_SCRIPT_IPC (Tauri IPC bridge, CSP-safe)");
-        format!(
-            r#"
-            // Inject window metadata for provider
-            window.__VAUGHAN_WINDOW_LABEL__ = "{}";
-            window.__VAUGHAN_ORIGIN__ = "{}";
-            
-            // Provider script
-            {}
-            "#,
-            window_label,
-            origin,
-            PROVIDER_SCRIPT_IPC.as_str()
-        )
-    };
-    eprintln!(
-        "[Window] Provider script prepared ({} bytes)",
-        provider_script.len()
+    // Prepare provider script with window metadata
+    let provider_script = format!(
+        r#"
+        // Inject window metadata for provider
+        window.__VAUGHAN_WINDOW_LABEL__ = "{}";
+        window.__VAUGHAN_ORIGIN__ = "{}";
+        
+        // Provider script
+        {}
+        "#,
+        window_label,
+        origin,
+        PROVIDER_SCRIPT_IPC.as_str()
     );
 
+    // ========================================================================
+    // STORAGE ISOLATION (Resolve Tracking Prevention)
+    // ========================================================================
+    let dapp_origin_slug = validated_url
+        .host_str()
+        .unwrap_or("unknown")
+        .replace(".", "_");
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?
+        .join("dapps-storage")
+        .join(dapp_origin_slug);
+
+    eprintln!("[Window] Using isolated data directory: {:?}", data_dir);
+
     // Create WebView window with provider injected
-    let _window = WebviewWindowBuilder::new(
-        &app,
-        &window_label,
-        window_url,
-    )
-    .title(title.clone().unwrap_or_else(|| "Vaughan - dApp".to_string()))
-    .inner_size(1200.0, 800.0)
-    .min_inner_size(800.0, 600.0)
-    .resizable(true)
-    .initialization_script(&provider_script)  // Inject provider before page loads
-    .build()
-    .map_err(|e| format!("Failed to create window: {}", e))?;
+    let _window = WebviewWindowBuilder::new(&app, &window_label, window_url)
+        .title(title.clone().unwrap_or_else(|| "Vaughan - dApp".to_string()))
+        .inner_size(1200.0, 800.0)
+        .min_inner_size(800.0, 600.0)
+        .resizable(true)
+        .data_directory(data_dir) // Isolated storage bucket
+        .initialization_script(&provider_script) // Inject provider before page loads
+        .build()
+        .map_err(|e| format!("Failed to create window: {}", e))?;
 
     eprintln!("[Window] WebView window created: {}", window_label);
 
     // Register window in WindowRegistry
-    let origin = validated_url.origin().ascii_serialization();
     state
         .window_registry
         .register_window(&window_label, &origin)
@@ -165,26 +173,18 @@ pub async fn open_dapp_window(
     // ========================================================================
     // AUTO-CONNECT: Pre-approve connection for wallet-opened dApps
     // ========================================================================
-    // This is safe because:
-    // 1. Wallet controls which dApps can be opened (whitelist)
-    // 2. User explicitly clicked "Open dApp" (clear intent)
-    // 3. Connection only reveals address (no private keys)
-    // 4. Transactions still require approval
-
-    // Get active account
     if let Ok(account) = state.active_account().await {
         eprintln!(
             "[Window] Creating auto-approved session for account: {:?}",
             account
         );
 
-        // Create auto-approved session
         if let Err(e) = state
             .session_manager
             .create_auto_approved_session(
                 &window_label,
                 &origin,
-                title,
+                Some(title.clone().unwrap_or_else(|| "Vaughan dApp".to_string())),
                 None, // icon
                 vec![account],
             )
@@ -194,7 +194,6 @@ pub async fn open_dapp_window(
                 "[Window] Warning: Failed to create auto-approved session: {}",
                 e
             );
-            // Don't fail window creation if session creation fails
         } else {
             eprintln!("[Window] Auto-approved session created successfully");
         }
@@ -203,104 +202,20 @@ pub async fn open_dapp_window(
     }
 
     eprintln!("[Window] Window opened successfully: {}", window_label);
-
     Ok(window_label)
 }
 
-/// Open dApp URL in native WebView window
+/// Legacy command for proxy-mode dApp opening
 ///
-/// Creates a new WebView window with provider script injected via
-/// initialization_script (runs BEFORE page loads, bypasses CSP).
-///
-/// # Arguments
-///
-/// * `app` - Tauri app handle
-/// * `state` - Application state (for window registry - TODO: Task 1.5)
-/// * `url` - dApp URL to load (must be http:// or https://)
-///
-/// # Returns
-///
-/// * `Ok(String)` - Window label (unique identifier)
-/// * `Err(String)` - Failed to create window or invalid URL
-///
-/// # Security
-///
-/// - URL validation (http/https only)
-/// - Provider script injected at webview level (bypasses CSP)
-/// - Window label is unique (UUID-based)
-/// - Window registered for tracking (TODO: Task 1.5)
-///
-/// # Example
-///
-/// ```typescript
-/// const windowLabel = await invoke('open_dapp_url', {
-///     url: 'https://swap.internetmoney.io'
-/// });
-/// ```
+/// **DEPRECATED**: Use `open_dapp_window(..., use_proxy: Some(true))` instead.
 #[tauri::command]
+#[specta::specta]
 pub async fn open_dapp_url(
     app: AppHandle,
     state: State<'_, VaughanState>,
     url: String,
 ) -> Result<String, String> {
-    eprintln!("[Window] Opening dApp URL: {}", url);
-
-    // Validate URL
-    let validated_url = validate_url(&url)?;
-    eprintln!("[Window] URL validated: {}", validated_url);
-
-    // **PHASE 3.6**: Use HTTP proxy to bypass CSP
-    // Proxy fetches content, strips CSP headers, injects provider script
-    let proxy_url = format!(
-        "http://localhost:8765/proxy?url={}",
-        urlencoding::encode(&url)
-    );
-    eprintln!("[Window] Using proxy URL: {}", proxy_url);
-
-    let window_url = WebviewUrl::External(
-        Url::parse(&proxy_url).map_err(|e| format!("Invalid proxy URL: {}", e))?,
-    );
-
-    // Generate unique window label
-    let window_label = format!("dapp-{}", uuid::Uuid::new_v4());
-    eprintln!("[Window] Generated window label: {}", window_label);
-
-    // Get provider script (lazy-loaded) - using IPC provider
-    let provider_script = PROVIDER_SCRIPT_IPC.as_str();
-    eprintln!(
-        "[Window] Provider script loaded ({} bytes)",
-        provider_script.len()
-    );
-
-    // Create WebView window
-    // Provider script injected via initialization_script (runs before page loads)
-    // Proxy serves content from localhost, so Tauri API is available
-    let _window = WebviewWindowBuilder::new(&app, &window_label, window_url)
-        .title("Vaughan - dApp Browser")
-        .inner_size(1200.0, 800.0)
-        .min_inner_size(800.0, 600.0)
-        .resizable(true)
-        .initialization_script(provider_script)
-        .build()
-        .map_err(|e| format!("Failed to create window: {}", e))?;
-
-    eprintln!("[Window] WebView window created: {}", window_label);
-
-    // Register window in WindowRegistry
-    let origin = validated_url.origin().ascii_serialization();
-    state
-        .window_registry
-        .register_window(&window_label, &origin)
-        .await
-        .map_err(|e| format!("Failed to register window: {}", e))?;
-
-    eprintln!(
-        "[Window] Window registered in registry: {} -> {}",
-        window_label, origin
-    );
-
-    eprintln!("[Window] Window opened successfully: {}", window_label);
-    Ok(window_label)
+    open_dapp_window(app, state, url, None, Some(true)).await
 }
 
 /// Navigate dApp window to new URL
@@ -336,6 +251,7 @@ pub async fn open_dapp_url(
 /// });
 /// ```
 #[tauri::command]
+#[specta::specta]
 pub async fn navigate_dapp(
     app: AppHandle,
     state: State<'_, VaughanState>,
@@ -411,6 +327,7 @@ pub async fn navigate_dapp(
 /// });
 /// ```
 #[tauri::command]
+#[specta::specta]
 pub async fn close_dapp(
     app: AppHandle,
     state: State<'_, VaughanState>,
@@ -474,6 +391,7 @@ pub async fn close_dapp(
 /// });
 /// ```
 #[tauri::command]
+#[specta::specta]
 pub async fn get_dapp_url(app: AppHandle, window_label: String) -> Result<String, String> {
     eprintln!("[Window] Getting URL for window: {}", window_label);
 
@@ -506,6 +424,7 @@ pub async fn get_dapp_url(app: AppHandle, window_label: String) -> Result<String
 /// * `Ok(())` - Window opened successfully
 /// * `Err(String)` - Failed to open window
 #[tauri::command]
+#[specta::specta]
 pub async fn open_dapp_browser(app: AppHandle, _url: Option<String>) -> Result<(), String> {
     let window_label = format!("dapp-browser-{}", uuid::Uuid::new_v4());
 

@@ -1,3 +1,7 @@
+// NOTE: This is a forward-looking stub for a future "relayer/broadcaster" feature.
+// It is not currently wired into the app, but kept so we can iterate on designs
+// without losing this sketch. See README "Code hygiene" for context.
+
 export interface BroadcasterFeeQuote {
     broadcasterUrl: string;
     feePercentage: number;

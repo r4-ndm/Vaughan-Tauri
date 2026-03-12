@@ -166,7 +166,7 @@ export function ApprovalModal() {
                     </div>
                 </div>
             );
-        } else if (request.type === "personal_sign") {
+        } else if (request.type === "sign_typed_data_v4") {
             return (
                 <div className="space-y-3 text-sm">
                     <div className="bg-secondary/30 p-3 rounded-md border border-border/50">
@@ -174,12 +174,20 @@ export function ApprovalModal() {
                             <span className="text-muted-foreground">Address:</span>
                             <span className="font-mono text-xs break-all bg-background/50 px-2 py-1 rounded">{request.params.address}</span>
 
-                            <span className="text-muted-foreground pt-1">Message:</span>
-                            <div className="bg-background/50 p-2 rounded border border-border text-xs break-words max-h-32 overflow-y-auto font-mono">
-                                {request.params.message}
+                            <span className="text-muted-foreground pt-1">Typed Data:</span>
+                            <div className="bg-background/50 p-2 rounded border border-border text-xs break-words max-h-48 overflow-y-auto font-mono whitespace-pre-wrap">
+                                {typeof request.params.typedData === 'string'
+                                    ? JSON.stringify(JSON.parse(request.params.typedData), null, 2)
+                                    : JSON.stringify(request.params.typedData, null, 2)}
                             </div>
                         </div>
                     </div>
+                </div>
+            );
+        } else if (request.type === "connection") {
+            return (
+                <div className="bg-secondary/30 p-4 rounded-md border border-border/50 text-center">
+                    <p className="text-sm">Allow this dApp to see your wallet address and request signatures?</p>
                 </div>
             );
         }
@@ -206,7 +214,9 @@ export function ApprovalModal() {
                         <ShieldCheck className="w-6 h-6" />
                     </div>
                     <div>
-                        <h2 className="text-xl font-bold tracking-tight">Signature Request</h2>
+                        <h2 className="text-xl font-bold tracking-tight">
+                            {request.type === "connection" ? "Connect Wallet" : "Signature Request"}
+                        </h2>
                         <p className="text-sm text-muted-foreground font-medium">{request.origin}</p>
                     </div>
                 </div>
@@ -259,10 +269,10 @@ export function ApprovalModal() {
                             {isLoading ? (
                                 <>
                                     <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                                    Signing...
+                                    {request.type === "connection" ? "Connecting..." : "Signing..."}
                                 </>
                             ) : (
-                                "Sign & Confirm"
+                                request.type === "connection" ? "Connect" : "Sign & Confirm"
                             )}
                         </button>
                     </div>
@@ -271,3 +281,4 @@ export function ApprovalModal() {
         </div>
     );
 }
+

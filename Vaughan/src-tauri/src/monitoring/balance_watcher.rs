@@ -5,15 +5,21 @@
 //! when an incoming transfer is detected.
 
 use alloy::primitives::{Address, U256};
-use alloy::providers::Provider;
+use serde::{Deserialize, Serialize};
+use specta::Type;
+use tauri_specta::Event;
 use std::collections::HashMap;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 use tracing::{debug, info, warn};
 
 use crate::audio;
-use crate::models::IERC20;
+use crate::chains::ChainAdapter;
 use crate::state::VaughanState;
+
+/// Typed event emitted when balances should be refreshed in the UI.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, tauri_specta::Event)]
+pub struct RefreshBalanceEvent;
 
 /// Spawn the background balance watcher task.
 ///
@@ -60,7 +66,6 @@ pub fn spawn(app_handle: AppHandle) {
                 Ok(a) => a,
                 Err(_) => continue,
             };
-            let provider = adapter.provider();
             let chain_id = adapter.chain_id();
 
             // Reset baseline on network switch
@@ -80,14 +85,15 @@ pub fn spawn(app_handle: AppHandle) {
 
             if focused == "native" {
                 // Poll native balance
-                if let Ok(balance) = provider.get_balance(account).await {
+                if let Ok(bal) = adapter.get_balance(&account.to_string()).await {
+                    let balance = U256::from_str_radix(&bal.raw, 10).unwrap_or_default();
                     if let Some(prev) = last_balance {
                         if balance > prev {
                             info!("[BalanceWatcher] Native incoming detected: {} -> {}", prev, balance);
                             if let Err(e) = state.sound_player.play(audio::AlertSound::CoinDrop) {
                                 warn!("[BalanceWatcher] Sound error: {}", e);
                             }
-                            let _ = app_handle.emit("refresh-balance", ());
+                            let _ = RefreshBalanceEvent.emit(&app_handle);
                         }
                     } else {
                         debug!("[BalanceWatcher] Native baseline set: {}", balance);
@@ -96,16 +102,15 @@ pub fn spawn(app_handle: AppHandle) {
                 }
             } else if let Ok(token_addr) = focused.parse::<Address>() {
                 // Poll specific token
-                let contract = IERC20::new(token_addr, provider.clone());
-                if let Ok(resp) = contract.balanceOf(account).call().await {
-                    let balance: U256 = resp._0;
+                if let Ok(bal) = adapter.get_token_balance(&token_addr.to_string(), &account.to_string()).await {
+                    let balance = U256::from_str_radix(&bal.raw, 10).unwrap_or_default();
                     if let Some(prev) = last_token_balances.get(&token_addr) {
                         if balance > *prev {
                             info!("[BalanceWatcher] Token incoming ({:?}): {} -> {}", token_addr, prev, balance);
                             if let Err(e) = state.sound_player.play(audio::AlertSound::CoinDrop) {
                                 warn!("[BalanceWatcher] Sound error: {}", e);
                             }
-                            let _ = app_handle.emit("refresh-balance", ());
+                            let _ = RefreshBalanceEvent.emit(&app_handle);
                         }
                     } else {
                         debug!("[BalanceWatcher] Token baseline set for {:?}: {}", token_addr, balance);

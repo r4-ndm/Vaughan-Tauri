@@ -9,6 +9,7 @@
  */
 use crate::error::WalletError;
 use serde::{Deserialize, Serialize};
+use specta::Type;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -18,7 +19,7 @@ use tokio::sync::{oneshot, Mutex};
 pub type ApprovalId = String;
 
 /// Approval request type
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum ApprovalRequestType {
     /// Connection request
@@ -67,7 +68,7 @@ pub enum ApprovalRequestType {
 }
 
 /// Approval request
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Type)]
 pub struct ApprovalRequest {
     /// Unique request ID
     pub id: ApprovalId,
@@ -82,7 +83,7 @@ pub struct ApprovalRequest {
     pub timeout: Duration,
 }
 
-/// Approval response
+/// Approval response (internal use; queue and RPC use `data: Option<Value>`)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApprovalResponse {
     /// Request ID
@@ -91,6 +92,24 @@ pub struct ApprovalResponse {
     pub approved: bool,
     /// Optional data (e.g., password for transactions)
     pub data: Option<serde_json::Value>,
+}
+
+/// Approval response shape for IPC/TypeScript (data as AnyJson)
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct ApprovalResponseExport {
+    pub id: String,
+    pub approved: bool,
+    pub data: Option<crate::error::AnyJson>,
+}
+
+impl From<ApprovalResponseExport> for ApprovalResponse {
+    fn from(e: ApprovalResponseExport) -> Self {
+        Self {
+            id: e.id,
+            approved: e.approved,
+            data: e.data.map(|a| a.0),
+        }
+    }
 }
 
 /// Pending approval with response channel

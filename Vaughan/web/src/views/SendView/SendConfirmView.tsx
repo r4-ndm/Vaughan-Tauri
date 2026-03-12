@@ -1,13 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { TransactionService } from "../../services/tauri";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "../../components/Layout";
 import { ArrowLeft, Send as SendIcon, AlertCircle, ShieldCheck } from "lucide-react";
-
-interface TransactionResponse {
-    tx_hash: string;
-}
 
 interface LocationState {
     from: string;
@@ -53,14 +49,14 @@ export const SendConfirmView: React.FC = () => {
         const estimate = async () => {
             if (!txParams) return;
             try {
-                const est = await invoke<EstimateGasResponse>("estimate_gas_simple", {
-                    from: txParams.from,
-                    to: txParams.to,
-                    amount: txParams.amount,
-                    tokenAddress: txParams.tokenAddress || null,
-                    data: txParams.data || null, // Support Railgun custom gas estimates
-                });
-                setGasEstimate(est);
+                const est = await TransactionService.estimateGasSimple(
+                    txParams.from,
+                    txParams.to,
+                    txParams.amount,
+                    txParams.tokenAddress || null,
+                    txParams.data || null
+                );
+                setGasEstimate({ gas_limit: Number(est.gas_limit), gas_price_gwei: est.gas_price_gwei });
                 // Update gas price and limit based on estimate if not custom
                 if (speed === "normal") {
                     setCustomGasPrice(est.gas_price_gwei);
@@ -123,29 +119,25 @@ export const SendConfirmView: React.FC = () => {
 
         try {
             // Validate transaction before sending
-            await invoke("validate_transaction", {
-                request: {
-                    to: txParams.to,
-                    amount: txParams.amount,
-                    gas_limit: currentGasLimit,
-                    token_address: txParams.tokenAddress || null,
-                    data: txParams.data || null,
-                },
+            await TransactionService.validateTransaction({
+                to: txParams.to,
+                amount: txParams.amount,
+                gas_limit: String(currentGasLimit),
+                token_address: txParams.tokenAddress || null,
+                data: txParams.data || null,
             });
 
-            const response = await invoke<TransactionResponse>("send_transaction", {
-                request: {
-                    from: txParams.from,
-                    to: txParams.to,
-                    amount: txParams.amount,
-                    password: password,
-                    gas_limit: currentGasLimit,
-                    gas_price_gwei: currentGasPrice.toString(),
-                    token_address: txParams.tokenAddress || null,
-                    data: txParams.data || null,
-                },
+            const txHashResult = await TransactionService.sendTransaction({
+                from: txParams.from,
+                to: txParams.to,
+                amount: txParams.amount,
+                password: password,
+                gas_limit: String(currentGasLimit),
+                gas_price_gwei: currentGasPrice.toString(),
+                token_address: txParams.tokenAddress || null,
+                data: txParams.data || null,
             });
-            setTxHash(response.tx_hash);
+            setTxHash(txHashResult);
             // Refresh balance
             queryClient.invalidateQueries({ queryKey: ["balance"] });
             queryClient.invalidateQueries({ queryKey: ["transactions"] });

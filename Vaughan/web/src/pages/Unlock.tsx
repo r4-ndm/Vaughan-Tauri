@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { invoke } from "@tauri-apps/api/core";
 import { Zap, EyeOff } from "lucide-react";
-import { PreferencesService, UserPreferences } from "../services/tauri";
+import { PreferencesService, UserPreferences, WalletService } from "../services/tauri";
 
 export default function Unlock() {
     const [password, setPassword] = useState("");
@@ -39,7 +38,7 @@ export default function Unlock() {
                 });
             }
 
-            await invoke("unlock_wallet", { password });
+            await WalletService.unlockWallet(password);
 
             // Initialize railgun wallet right after a successful unlock if privacy is enabled
             if (privacyEnabled) {
@@ -52,8 +51,14 @@ export default function Unlock() {
             }
 
             navigate("/dashboard");
-        } catch (err) {
-            setError(err as string);
+        } catch (err: any) {
+            const msg =
+                err instanceof Error
+                    ? err.message
+                    : typeof err === 'string'
+                    ? err
+                    : JSON.stringify(err);
+            setError(msg);
         } finally {
             setLoading(false);
         }

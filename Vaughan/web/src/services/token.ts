@@ -1,50 +1,17 @@
-import { invoke } from '@tauri-apps/api/core';
+/**
+ * Token service – uses typed commands from tauri.ts (tauri-specta bindings).
+ */
+import { TokenService } from './tauri';
+import type { TokenPriceResponse, TokenBalanceResponse, TrackedToken } from '../bindings/tauri-commands';
 
-export interface TokenPriceResponse {
-    symbol: string;
-    price_usd: number;
-    timestamp: number;
-}
+export type { TokenPriceResponse, TokenBalanceResponse, TrackedToken };
 
-export interface TokenBalanceResponse {
-    balance: string;
-    balance_formatted: string;
-    symbol: string;
-    decimals: number;
-}
-
-export interface TrackedToken {
-    address: string;
-    symbol: string;
-    name: string;
-    decimals: number;
-    chain_id: number;
-}
-
-export const getTokenPrice = async (): Promise<TokenPriceResponse> => {
-    return invoke('get_token_price');
-};
-
-export const refreshTokenPrices = async (): Promise<TokenPriceResponse> => {
-    return invoke('refresh_token_prices');
-};
-
-export const getTokenBalance = async (tokenAddress: string, walletAddress: string): Promise<TokenBalanceResponse> => {
-    return invoke('get_token_balance', { tokenAddress, walletAddress });
-};
-
-export const getTokenMetadata = async (tokenAddress: string): Promise<TrackedToken> => {
-    return invoke('get_token_metadata', { tokenAddress });
-};
-
-export const addCustomToken = async (tokenAddress: string): Promise<TrackedToken> => {
-    return invoke('add_custom_token', { tokenAddress });
-};
-
-export const removeCustomToken = async (tokenAddress: string): Promise<void> => {
-    return invoke('remove_custom_token', { tokenAddress });
-};
-
-export const getTrackedTokens = async (): Promise<TrackedToken[]> => {
-    return invoke('get_tracked_tokens');
-};
+export const getTokenPrice = (): Promise<TokenPriceResponse> => TokenService.getTokenPrice();
+export const refreshTokenPrices = (): Promise<TokenPriceResponse> => TokenService.refreshTokenPrices();
+export const getTokenBalance = (tokenAddress: string, walletAddress: string): Promise<TokenBalanceResponse> =>
+  TokenService.getTokenBalance(tokenAddress, walletAddress);
+export const getTokenMetadata = (tokenAddress: string): Promise<TrackedToken> =>
+  TokenService.getTokenMetadata(tokenAddress);
+export const addCustomToken = (tokenAddress: string): Promise<TrackedToken> => TokenService.addCustomToken(tokenAddress);
+export const removeCustomToken = (tokenAddress: string): Promise<void> => TokenService.removeCustomToken(tokenAddress);
+export const getTrackedTokens = (): Promise<TrackedToken[]> => TokenService.getTrackedTokens();

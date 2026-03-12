@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Save, Copy, Edit2, Trash2 } from 'lucide-react';
-import { invoke } from '@tauri-apps/api/core';
+import { WalletService } from '../../services/tauri';
 import { useQueryClient } from '@tanstack/react-query';
 
 interface AccountOptionsModalProps {
@@ -67,7 +67,7 @@ export function AccountOptionsModal({ isOpen, onClose, currentAddress, currentNa
         setLoading(true);
         setError(null);
         try {
-            await invoke("delete_account", { address: currentAddress });
+            await WalletService.deleteAccount(currentAddress);
             await queryClient.invalidateQueries({ queryKey: ["accounts"] });
             onDeleteSuccess();
             onClose();
@@ -84,8 +84,8 @@ export function AccountOptionsModal({ isOpen, onClose, currentAddress, currentNa
         setLoading(true);
 
         const newName = name.trim();
-        // Re-attach "HD " prefix if it is an HD account
-        const finalName = accountType === 'hd' ? `HD ${newName}` : newName;
+        // Re-attach "HD " prefix only for derived HD accounts (index >= 1); first account is "Wallet 1"
+        const finalName = (accountType === 'hd' && (accountIndex === undefined || accountIndex > 0)) ? `HD ${newName}` : newName;
 
         if (!password) {
             setError("Password is required to approve rename.");
@@ -94,7 +94,7 @@ export function AccountOptionsModal({ isOpen, onClose, currentAddress, currentNa
         }
 
         try {
-            await invoke("rename_account", { address: currentAddress, newName: finalName, password });
+            await WalletService.renameAccount(currentAddress, finalName, password);
             await queryClient.invalidateQueries({ queryKey: ["accounts"] });
             onClose();
         } catch (err: any) {
@@ -117,10 +117,10 @@ export function AccountOptionsModal({ isOpen, onClose, currentAddress, currentNa
 
         try {
             if (exportingKey === 'seed') {
-                const seed = await invoke<string>("export_mnemonic", { password });
+                const seed = await WalletService.exportMnemonic(password);
                 setExportValue(seed);
             } else if (exportingKey === 'private') {
-                const pk = await invoke<string>("export_private_key", { address: currentAddress, password });
+                const pk = await WalletService.exportPrivateKey(currentAddress, password);
                 setExportValue(pk);
             }
         } catch (err: any) {
@@ -253,7 +253,7 @@ export function AccountOptionsModal({ isOpen, onClose, currentAddress, currentNa
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={loading || (accountType === 'hd' ? `HD ${name.trim()}` === currentName : name.trim() === currentName) || name.trim() === ""}
+                                    disabled={loading || (accountType === 'hd' && (accountIndex === undefined || accountIndex > 0) ? `HD ${name.trim()}` === currentName : name.trim() === currentName) || name.trim() === ""}
                                     className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <Save size={16} />

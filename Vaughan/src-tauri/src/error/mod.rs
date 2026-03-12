@@ -7,11 +7,37 @@
 //
 // ============================================================================
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use specta::{datatype::DataType, Generics, Type, TypeCollection};
 use std::fmt;
 
+/// Wrapper for `serde_json::Value` so it implements `specta::Type` (as `any`) for IPC bindings.
+#[derive(Debug, Clone)]
+pub struct AnyJson(pub serde_json::Value);
+
+impl Serialize for AnyJson {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        self.0.serialize(s)
+    }
+}
+
+impl<'de> Deserialize<'de> for AnyJson {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        serde_json::Value::deserialize(d).map(AnyJson)
+    }
+}
+
+impl Type for AnyJson {
+    fn inline(
+        _type_map: &mut TypeCollection,
+        _generics: Generics<'_>,
+    ) -> DataType {
+        DataType::Any
+    }
+}
+
 /// Central error type for all wallet operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(tag = "type", content = "message")]
 pub enum WalletError {
     // ===== Network Errors =====
@@ -385,11 +411,11 @@ impl From<alloy::transports::RpcError<alloy::transports::TransportErrorKind>> fo
                         have: "unknown".to_string(),
                     }
                 } else if msg.contains("nonce") {
-                    Self::NonceMismatch(msg.clone())
+                    Self::NonceMismatch(msg.to_string())
                 } else if msg.contains("gas") {
-                    Self::GasEstimationFailed(msg.clone())
+                    Self::GasEstimationFailed(msg.to_string())
                 } else {
-                    Self::RpcError(msg.clone())
+                    Self::RpcError(msg.to_string())
                 }
             },
             e => Self::RpcError(e.to_string()),

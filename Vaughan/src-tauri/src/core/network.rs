@@ -33,12 +33,13 @@
 use crate::chains::{Balance, ChainAdapter, ChainInfo, ChainType};
 use crate::error::WalletError;
 use serde::{Deserialize, Serialize};
+use specta::Type;
 use url::Url;
 
 /// Network configuration
 ///
 /// Defines all information needed to connect to and interact with a blockchain network.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Type)]
 pub struct NetworkConfig {
     /// Unique network identifier (e.g., "ethereum", "pulsechain")
     pub id: String,
@@ -68,7 +69,7 @@ pub struct NetworkConfig {
 /// Token information
 ///
 /// Describes a token's basic properties.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Type)]
 pub struct TokenInfo {
     /// Token symbol (e.g., "ETH", "PLS")
     pub symbol: String,

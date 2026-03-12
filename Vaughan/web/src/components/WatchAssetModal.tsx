@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { X, AlertCircle } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
+import { TokenService } from "../services/tauri";
 import { listen } from "@tauri-apps/api/event";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -46,7 +46,7 @@ export function WatchAssetModal() {
         setError(null);
 
         try {
-            await invoke("add_custom_token", { tokenAddress: request.address });
+            await TokenService.addCustomToken(request.address);
             await queryClient.invalidateQueries({ queryKey: ["tracked_tokens"] });
             onClose();
         } catch (err: any) {

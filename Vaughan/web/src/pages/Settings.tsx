@@ -1,10 +1,9 @@
 import { useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Save, RotateCcw, Shield, Globe, Lock, Cpu } from "lucide-react";
 import { Layout } from "../components/Layout";
-import { PerformanceService, MethodStats } from "../services/tauri";
+import { PerformanceService, MethodStats, NetworkService, WalletService } from "../services/tauri";
 
 interface NetworkInfo {
     network_id: string;
@@ -21,7 +20,10 @@ export default function Settings() {
 
     const { data: networkInfo } = useQuery<NetworkInfo>({
         queryKey: ["network_info"],
-        queryFn: () => invoke("get_network_info"),
+        queryFn: async () => {
+            const n = await NetworkService.getNetworkInfo();
+            return { network_id: n.id, name: n.name, chain_id: n.chain_id, rpc_url: n.rpc_url, explorer_url: n.explorer_url ?? "", native_token: { symbol: n.currency_symbol, name: n.currency_symbol, decimals: 18 } };
+        },
     });
 
     const { data: performanceStats } = useQuery<Record<string, MethodStats>>({
@@ -47,12 +49,10 @@ export default function Settings() {
         setRpcSaving(true);
         setRpcMsg("");
         try {
-            await invoke("switch_network", {
-                request: {
-                    network_id: networkInfo?.network_id ?? "custom",
-                    rpc_url: rpcUrl.trim(),
-                    chain_id: networkInfo?.chain_id ?? 1,
-                },
+            await NetworkService.switchNetwork({
+                network_id: networkInfo?.network_id ?? "custom",
+                rpc_url: rpcUrl.trim(),
+                chain_id: networkInfo?.chain_id ?? 1,
             });
             queryClient.invalidateQueries({ queryKey: ["network_info"] });
             queryClient.invalidateQueries({ queryKey: ["balance"] });
@@ -66,14 +66,14 @@ export default function Settings() {
     };
 
     const handleLockNow = async () => {
-        await invoke("lock_wallet").catch(() => { });
+        await WalletService.lockWallet().catch(() => { });
         queryClient.clear();
         navigate("/unlock");
     };
 
     const handleResetState = async () => {
         if (!window.confirm("This will clear all wallet data. Are you sure?")) return;
-        await invoke("reset_state").catch(() => { });
+        await WalletService.resetState().catch(() => { });
         queryClient.clear();
         // Force a hard reload to completely flush React state and re-mount App.tsx
         window.location.href = "/";

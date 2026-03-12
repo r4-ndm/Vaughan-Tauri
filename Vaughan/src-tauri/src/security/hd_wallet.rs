@@ -39,7 +39,6 @@
 //! ```
 
 use crate::error::WalletError;
-use alloy::primitives::Address;
 use alloy::signers::local::PrivateKeySigner;
 use bip39::{Language, Mnemonic};
 use coins_bip32::{path::DerivationPath, prelude::XPriv};
@@ -120,19 +119,8 @@ pub fn mnemonic_to_seed(mnemonic: &str, passphrase: Option<&str>) -> Result<Vec<
     Ok(seed.to_vec())
 }
 
-/// Derive an Ethereum account from a seed
-///
-/// Uses the standard Ethereum derivation path: m/44'/60'/0'/0/{index}
-///
-/// # Arguments
-///
-/// * `seed` - The 64-byte seed from BIP-39
-/// * `index` - The account index (0 for first account, 1 for second, etc.)
-///
-/// # Returns
-///
-/// A tuple of (private_key_hex, ethereum_address)
-pub fn derive_account(seed: &[u8], index: u32) -> Result<(String, Address), WalletError> {
+/// A PrivateKeySigner
+pub fn derive_account(seed: &[u8], index: u32) -> Result<PrivateKeySigner, WalletError> {
     // Create master key from seed
     let master_key = XPriv::root_from_seed(seed, None).map_err(|e| {
         WalletError::KeyDerivationFailed(format!("Master key creation failed: {}", e))
@@ -149,22 +137,16 @@ pub fn derive_account(seed: &[u8], index: u32) -> Result<(String, Address), Wall
         .map_err(|e| WalletError::KeyDerivationFailed(format!("Key derivation failed: {}", e)))?;
 
     // Get private key from XPriv
-    // XPriv implements AsRef<SigningKey> where SigningKey is k256::ecdsa::SigningKey
     use coins_bip32::ecdsa::SigningKey;
-
     let signing_key: &SigningKey = derived_key.as_ref();
-
-    // Get the private key bytes from the signing key
     let private_key_bytes = signing_key.to_bytes();
     let private_key_hex = hex::encode(&private_key_bytes[..]);
 
-    // Create Alloy signer to get address
+    // Create Alloy signer
     let signer = PrivateKeySigner::from_str(&private_key_hex)
         .map_err(|e| WalletError::KeyDerivationFailed(format!("Signer creation failed: {}", e)))?;
 
-    let address = signer.address();
-
-    Ok((private_key_hex, address))
+    Ok(signer)
 }
 
 /// Derive a deterministic Railgun Mnemonic from the master seed
@@ -202,19 +184,8 @@ pub fn derive_railgun_mnemonic(seed: &[u8]) -> Result<String, WalletError> {
     Ok(mnemonic.to_string())
 }
 
-/// Derive multiple accounts from a seed
-///
-/// Convenience function to derive multiple accounts at once.
-///
-/// # Arguments
-///
-/// * `seed` - The 64-byte seed from BIP-39
-/// * `count` - Number of accounts to derive
-///
-/// # Returns
-///
-/// A vector of (private_key_hex, ethereum_address) tuples
-pub fn derive_accounts(seed: &[u8], count: u32) -> Result<Vec<(String, Address)>, WalletError> {
+/// A vector of PrivateKeySigner
+pub fn derive_accounts(seed: &[u8], count: u32) -> Result<Vec<PrivateKeySigner>, WalletError> {
     let mut accounts = Vec::with_capacity(count as usize);
 
     for index in 0..count {
@@ -296,18 +267,16 @@ mod tests {
         let seed = mnemonic_to_seed(mnemonic, None).unwrap();
 
         // Derive first account
-        let (private_key, address) = derive_account(&seed, 0).unwrap();
-
-        // Private key should be 64 hex characters (32 bytes)
-        assert_eq!(private_key.len(), 64);
+        let signer = derive_account(&seed, 0).unwrap();
+        let address = signer.address();
 
         // Address should be valid
-        assert_ne!(address, Address::ZERO);
+        assert_ne!(address, alloy::primitives::Address::ZERO);
 
         // Known test vector for this mnemonic (index 0)
         // Address should be: 0x9858EfFD232B4033E47d90003D41EC34EcaEda94
         let expected_address =
-            Address::from_str("0x9858EfFD232B4033E47d90003D41EC34EcaEda94").unwrap();
+            alloy::primitives::Address::from_str("0x9858EfFD232B4033E47d90003D41EC34EcaEda94").unwrap();
         assert_eq!(address, expected_address);
 
         println!("✅ Account derivation works (matches test vector)");
@@ -324,14 +293,13 @@ mod tests {
         assert_eq!(accounts.len(), 3);
 
         // All accounts should be different
-        assert_ne!(accounts[0].1, accounts[1].1);
-        assert_ne!(accounts[1].1, accounts[2].1);
-        assert_ne!(accounts[0].1, accounts[2].1);
+        assert_ne!(accounts[0].address(), accounts[1].address());
+        assert_ne!(accounts[1].address(), accounts[2].address());
+        assert_ne!(accounts[0].address(), accounts[2].address());
 
         // Deriving same index should give same result
-        let (pk0, addr0) = derive_account(&seed, 0).unwrap();
-        assert_eq!(accounts[0].0, pk0);
-        assert_eq!(accounts[0].1, addr0);
+        let signer0 = derive_account(&seed, 0).unwrap();
+        assert_eq!(accounts[0].address(), signer0.address());
 
         println!("✅ Multiple account derivation works");
     }
@@ -342,12 +310,11 @@ mod tests {
         let seed = mnemonic_to_seed(&mnemonic, None).unwrap();
 
         // Derive same account twice
-        let (pk1, addr1) = derive_account(&seed, 0).unwrap();
-        let (pk2, addr2) = derive_account(&seed, 0).unwrap();
+        let signer1 = derive_account(&seed, 0).unwrap();
+        let signer2 = derive_account(&seed, 0).unwrap();
 
         // Should be identical
-        assert_eq!(pk1, pk2);
-        assert_eq!(addr1, addr2);
+        assert_eq!(signer1.address(), signer2.address());
 
         println!("✅ Derivation is deterministic");
     }
@@ -358,15 +325,13 @@ mod tests {
         let seed = mnemonic_to_seed(&mnemonic, None).unwrap();
 
         // Derive accounts at different indices
-        let (pk0, addr0) = derive_account(&seed, 0).unwrap();
-        let (pk1, addr1) = derive_account(&seed, 1).unwrap();
-        let (pk2, addr2) = derive_account(&seed, 2).unwrap();
+        let signer0 = derive_account(&seed, 0).unwrap();
+        let signer1 = derive_account(&seed, 1).unwrap();
+        let signer2 = derive_account(&seed, 2).unwrap();
 
         // All should be different
-        assert_ne!(pk0, pk1);
-        assert_ne!(pk1, pk2);
-        assert_ne!(addr0, addr1);
-        assert_ne!(addr1, addr2);
+        assert_ne!(signer0.address(), signer1.address());
+        assert_ne!(signer1.address(), signer2.address());
 
         println!("✅ Different indices produce different accounts");
     }

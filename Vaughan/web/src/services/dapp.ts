@@ -1,33 +1,23 @@
-import { invoke } from "@tauri-apps/api/core";
+/**
+ * Dapp / approval service – uses typed commands from tauri.ts (tauri-specta bindings).
+ */
+import { DappService } from './tauri';
+import type { ApprovalRequest, ApprovalResponseExport } from '../bindings/tauri-commands';
 
-export interface ApprovalRequest {
-    id: string;
-    window_label: string;
-    request_type: {
-        type: string;
-        [key: string]: any;
-    };
-    created_at: number;
-}
-
-export interface ApprovalResponse {
-    id: string;
-    approved: boolean;
-    data?: any;
-}
+export type { ApprovalRequest, ApprovalResponseExport };
 
 export async function getPendingApprovals(): Promise<ApprovalRequest[]> {
-    return await invoke("get_pending_approvals");
+  return DappService.getPendingApprovals();
 }
 
-export async function respondToApproval(response: ApprovalResponse): Promise<void> {
-    await invoke("respond_to_approval", { response });
+export async function respondToApproval(response: ApprovalResponseExport): Promise<void> {
+  return DappService.respondToApproval(response);
 }
 
 export async function cancelApproval(id: string): Promise<void> {
-    await invoke("cancel_approval", { id });
+  return DappService.cancelApproval(id);
 }
 
 export async function clearAllApprovals(): Promise<void> {
-    await invoke("clear_all_approvals");
+  return DappService.clearAllApprovals();
 }

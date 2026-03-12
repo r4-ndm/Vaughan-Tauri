@@ -28,6 +28,7 @@
 //! ```
 
 use serde::Serialize;
+use specta::Type;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -44,7 +45,7 @@ pub struct RequestTiming {
 }
 
 /// Performance statistics for a method
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Type)]
 pub struct MethodStats {
     /// Number of requests
     pub count: usize,

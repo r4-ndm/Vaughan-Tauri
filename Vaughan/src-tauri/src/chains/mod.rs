@@ -15,6 +15,7 @@ pub mod types;
 
 use crate::error::WalletError;
 use async_trait::async_trait;
+use alloy::rpc::types::eth::TransactionRequest;
 
 // Re-export all types for convenience
 pub use types::{
@@ -59,7 +60,7 @@ pub type NetworkId = String;
 ///         let balance = self.provider.get_balance(address).await?;
 ///         Ok(Balance::new(/* ... */))
 ///     }
-///     
+///
 ///     // ... implement other methods
 /// }
 /// ```
@@ -200,33 +201,44 @@ pub trait ChainAdapter: Send + Sync {
         limit: u32,
     ) -> Result<Vec<TxRecord>, WalletError>;
 
+    /// Get native transaction history
+    async fn get_transaction_history(
+        &self,
+        address: &str,
+        limit: u32,
+    ) -> Result<Vec<TxRecord>, WalletError>;
+
+    /// Get token transfer history
+    async fn get_token_transfer_history(
+        &self,
+        address: &str,
+        limit: u32,
+    ) -> Result<Vec<TxRecord>, WalletError>;
+
     // ========================================================================
     // Fee Estimation
     // ========================================================================
 
     /// Estimate transaction fee
-    ///
-    /// # Arguments
-    ///
-    /// * `tx` - Transaction to estimate fee for
-    ///
-    /// # Returns
-    ///
-    /// * `Fee` - Fee estimate with amount, formatted value, and optional USD value
-    ///
-    /// # Errors
-    ///
-    /// * `WalletError::GasEstimationFailed` - If fee estimation fails
-    /// * `WalletError::InvalidTransaction` - If transaction is invalid
-    /// * `WalletError::NetworkError` - If network request fails
-    ///
-    /// # Example
-    ///
-    /// ```rust,ignore
-    /// let fee = adapter.estimate_fee(&tx).await?;
-    /// println!("Estimated fee: {}", fee.formatted);
-    /// ```
     async fn estimate_fee(&self, tx: &ChainTransaction) -> Result<Fee, WalletError>;
+
+    /// Estimate gas for a transaction request
+    async fn estimate_gas(&self, tx: TransactionRequest) -> Result<u64, WalletError>;
+
+    /// Call a contract method without sending a transaction (constant call)
+    async fn call(&self, tx: TransactionRequest) -> Result<alloy::primitives::Bytes, WalletError>;
+
+    /// Get transaction by hash
+    async fn get_transaction_by_hash(&self, hash: alloy::primitives::B256) -> Result<Option<alloy::rpc::types::eth::Transaction>, WalletError>;
+
+    /// Get transaction receipt
+    async fn get_transaction_receipt(&self, hash: alloy::primitives::B256) -> Result<Option<alloy::rpc::types::eth::TransactionReceipt>, WalletError>;
+
+    /// Get token balance
+    async fn get_token_balance(&self, token_address: &str, wallet_address: &str) -> Result<Balance, WalletError>;
+
+    /// Get token metadata
+    async fn get_token_metadata(&self, token_address: &str) -> Result<TokenInfo, WalletError>;
 
     // ========================================================================
     // Address Validation
@@ -289,6 +301,9 @@ pub trait ChainAdapter: Send + Sync {
     /// }
     /// ```
     fn chain_type(&self) -> ChainType;
+
+    /// Generic RPC request bypass
+    async fn raw_request(&self, method: String, params: Vec<serde_json::Value>) -> Result<serde_json::Value, WalletError>;
 }
 
 // ============================================================================
@@ -333,12 +348,13 @@ pub fn is_chain_supported(chain_type: ChainType) -> bool {
 pub fn supported_chains() -> Vec<ChainType> {
     vec![ChainType::Evm]
     // Add more as we implement them:
-    // vec![ChainType::Evm, ChainType::Stellar, ChainType::Aptos]
+    // vec![ChainType::Evm, ChainType::Stellar | ChainType::Aptos]
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloy::primitives::Address;
 
     #[test]
     fn test_is_chain_supported() {
@@ -352,5 +368,12 @@ mod tests {
         let chains = supported_chains();
         assert_eq!(chains.len(), 1);
         assert_eq!(chains[0], ChainType::Evm);
+    }
+
+    #[test]
+    fn test_address_zero() {
+        let address = Address::ZERO;
+        // Address should be valid
+        assert_ne!(address, Address::ZERO);
     }
 }

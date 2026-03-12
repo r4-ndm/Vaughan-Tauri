@@ -4,11 +4,13 @@
 ///!
 ///! **PHASE 3.4 UPDATE**: Window-specific security validation to prevent
 ///! cross-window attacks and origin spoofing.
-use crate::dapp::{rpc, DappConnection};
-use crate::error::WalletError;
+use crate::dapp::rpc;
+use crate::error::{AnyJson, WalletError};
+use crate::models::dapp::DappConnectionExport;
 use crate::state::VaughanState;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use specta::Type;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -16,41 +18,31 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 use tokio::sync::Mutex;
 
 /// dApp request structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct DappRequest {
-    /// Request ID (UUID)
     pub id: String,
-    /// Request timestamp (Unix timestamp)
     pub timestamp: u64,
-    /// RPC method
     pub method: String,
-    /// Method parameters
-    pub params: Vec<Value>,
+    pub params: Vec<AnyJson>,
 }
 
 /// dApp response structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct DappResponse {
-    /// Request ID
     pub id: String,
-    /// Result (if successful)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub result: Option<Value>,
-    /// Error (if failed)
+    pub result: Option<AnyJson>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<DappError>,
 }
 
 /// dApp error structure (EIP-1193 + EIP-1474)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct DappError {
-    /// Error code
     pub code: i32,
-    /// Error message
     pub message: String,
-    /// Additional data
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<Value>,
+    pub data: Option<AnyJson>,
 }
 
 // ============================================================================
@@ -165,6 +157,7 @@ lazy_static::lazy_static! {
 /// - Session validated per (window_label, origin) pair
 /// - Rate limiting per (window_label, origin) pair
 #[tauri::command]
+#[specta::specta]
 pub async fn dapp_request(
     app: AppHandle,
     window: WebviewWindow,
@@ -337,13 +330,14 @@ pub async fn dapp_request(
     // ========================================================================
 
     // Pass window_label to rpc for approval routing
+    let params: Vec<Value> = request.params.into_iter().map(|a| a.0).collect();
     match rpc::handle_request(
         &app,
         &state,
         &window_label,
         &origin,
         &request.method,
-        request.params,
+        params,
     )
     .await
     {
@@ -354,7 +348,7 @@ pub async fn dapp_request(
             eprintln!("[dapp_request] Request successful: {}", request.id);
             Ok(DappResponse {
                 id: request.id,
-                result: Some(result),
+                result: Some(AnyJson(result)),
                 error: None,
             })
         },
@@ -405,6 +399,7 @@ pub async fn dapp_request(
 /// * `Ok(Vec<String>)` - Connected accounts
 /// * `Err(String)` - Connection failed
 #[tauri::command]
+#[specta::specta]
 pub async fn connect_dapp(
     window: WebviewWindow,
     state: State<'_, VaughanState>,
@@ -452,6 +447,7 @@ pub async fn connect_dapp(
 ///
 /// * `Ok(())` - Disconnected
 #[tauri::command]
+#[specta::specta]
 pub async fn disconnect_dapp(
     window: WebviewWindow,
     state: State<'_, VaughanState>,
@@ -483,10 +479,12 @@ pub async fn disconnect_dapp(
 ///
 /// * `Ok(Vec<DappConnection>)` - Connected dApps
 #[tauri::command]
+#[specta::specta]
 pub async fn get_connected_dapps(
     state: State<'_, VaughanState>,
-) -> Result<Vec<DappConnection>, String> {
-    Ok(state.session_manager.get_all_sessions().await)
+) -> Result<Vec<DappConnectionExport>, String> {
+    let sessions = state.session_manager.get_all_sessions().await;
+    Ok(sessions.into_iter().map(DappConnectionExport::from).collect())
 }
 
 /// Disconnect from dApp by origin
@@ -502,6 +500,7 @@ pub async fn get_connected_dapps(
 ///
 /// * `Ok(())` - Disconnected successfully
 #[tauri::command]
+#[specta::specta]
 pub async fn disconnect_dapp_by_origin(
     state: State<'_, VaughanState>,
     origin: String,
@@ -545,6 +544,7 @@ pub async fn disconnect_dapp_by_origin(
 ///
 /// * `Ok(Vec<ApprovalRequest>)` - All pending approval requests
 #[tauri::command]
+#[specta::specta]
 pub async fn get_pending_approvals(
     state: State<'_, VaughanState>,
 ) -> Result<Vec<crate::dapp::ApprovalRequest>, String> {
@@ -567,11 +567,13 @@ pub async fn get_pending_approvals(
 /// * `Ok(())` - Response sent successfully
 /// * `Err(String)` - If request not found or other error
 #[tauri::command]
+#[specta::specta]
 pub async fn respond_to_approval(
     app: AppHandle,
     state: State<'_, VaughanState>,
-    response: crate::dapp::ApprovalResponse,
+    response: crate::dapp::ApprovalResponseExport,
 ) -> Result<(), String> {
+    let response: crate::dapp::ApprovalResponse = response.into();
     eprintln!("[dApp] Responding to approval: {}", response.id);
 
     // Get approval request to find window label
@@ -610,6 +612,7 @@ pub async fn respond_to_approval(
 /// * `Ok(())` - Request cancelled successfully
 /// * `Err(String)` - If request not found or other error
 #[tauri::command]
+#[specta::specta]
 pub async fn cancel_approval(state: State<'_, VaughanState>, id: String) -> Result<(), String> {
     state
         .approval_queue
@@ -630,6 +633,7 @@ pub async fn cancel_approval(state: State<'_, VaughanState>, id: String) -> Resu
 ///
 /// * `Ok(())` - All requests cleared
 #[tauri::command]
+#[specta::specta]
 pub async fn clear_all_approvals(state: State<'_, VaughanState>) -> Result<(), String> {
     state.approval_queue.clear_all().await;
     Ok(())
@@ -655,6 +659,7 @@ pub async fn clear_all_approvals(state: State<'_, VaughanState>) -> Result<(), S
 /// }
 /// ```
 #[tauri::command]
+#[specta::specta]
 pub async fn get_performance_stats(
     state: State<'_, VaughanState>,
 ) -> Result<std::collections::HashMap<String, crate::dapp::MethodStats>, String> {
@@ -678,6 +683,7 @@ pub async fn get_performance_stats(
 /// - Path validation to prevent directory traversal
 ///
 #[tauri::command]
+#[specta::specta]
 pub async fn launch_external_app(exe_path: String) -> Result<(), String> {
     eprintln!("[Dapp] Launching external app: {}", exe_path);
 

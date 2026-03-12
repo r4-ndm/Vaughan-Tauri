@@ -2,6 +2,7 @@ pub mod approval;
 pub mod health;
 pub mod logging;
 pub mod profiling;
+pub mod proxy;
 ///! dApp Integration Module
 ///!
 ///! Provides EIP-1193 compatible provider for dApps
@@ -10,7 +11,7 @@ pub mod rpc;
 pub mod session;
 pub mod window_registry;
 
-pub use approval::{ApprovalQueue, ApprovalRequest, ApprovalRequestType, ApprovalResponse};
+pub use approval::{ApprovalQueue, ApprovalRequest, ApprovalRequestType, ApprovalResponse, ApprovalResponseExport};
 pub use health::{HealthMetrics, HealthMonitor};
 pub use profiling::{MethodStats, Profiler};
 pub use rate_limiter::RateLimiter;

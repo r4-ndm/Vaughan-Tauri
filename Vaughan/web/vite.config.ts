@@ -120,6 +120,16 @@ export default defineConfig(async () => ({
         changeOrigin: true,
         rewrite: (path: string) => path.replace(/^\/rpc\/pulse-test2/, ''),
       },
+      '/rpc/sepolia': {
+        target: 'https://rpc.sepolia.org',
+        changeOrigin: true,
+        rewrite: (path: string) => path.replace(/^\/rpc\/sepolia/, ''),
+      },
+      '/rpc/amoy': {
+        target: 'https://rpc-amoy.polygon.technology',
+        changeOrigin: true,
+        rewrite: (path: string) => path.replace(/^\/rpc\/amoy/, ''),
+      },
     },
     hmr: host
       ? {

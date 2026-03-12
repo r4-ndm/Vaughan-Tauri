@@ -2,406 +2,311 @@
  * EIP-1193 Provider - Tauri IPC Bridge (CSP-Safe)
  * 
  * This provider uses Tauri IPC via postMessage bridge to bypass CSP restrictions.
- * 
- * Architecture:
- * 1. This script runs in privileged context (initialization_script, before CSP)
- * 2. Has full access to Tauri APIs (__TAURI__.invoke, __TAURI__.listen)
- * 3. Creates postMessage bridge between page and Tauri backend
- * 4. Injects window.ethereum that uses postMessage (CSP-safe)
- * 
- * Why This Works:
- * - initialization_script runs before CSP is applied
- * - postMessage is explicitly allowed by CSP
- * - Page never touches Tauri APIs directly
- * - Same pattern used by browser extensions (MetaMask, etc.)
+ * It is stabilized with a retry mechanism for Tauri 2.0 initialization.
  */
 
-(async function () {
+(function () {
   'use strict';
 
   console.log('[Vaughan-IPC] Initializing Tauri IPC bridge...');
 
-  // Check if Tauri APIs are available
-  if (!window.__TAURI__) {
-    console.error('[Vaughan-IPC] Tauri APIs not available');
-    return;
+  // Wait for __TAURI__ to be available (retry up to 40 times with 100ms delay)
+  // Added check for transformCallback which is required for invoke/listen to work
+  function waitForTauri(callback, attempts = 40) {
+    const isTauriReady = window.__TAURI__ &&
+      window.__TAURI__.core &&
+      window.__TAURI__.event &&
+      typeof window.__TAURI__.core.invoke === 'function';
+
+    // Some internal Tauri 2.0 transforms might not be ready yet even if 'core' exists
+    // We check for a common internal used by invoke
+    if (isTauriReady) {
+      // Give Tauri a tiny bit more time to settle internal state
+      setTimeout(callback, 50);
+    } else if (attempts > 0) {
+      setTimeout(() => waitForTauri(callback, attempts - 1), 100);
+    } else {
+      console.error('[Vaughan-IPC] Tauri APIs not available after retries');
+    }
   }
 
-  const { invoke } = window.__TAURI__.core;
-  const { listen } = window.__TAURI__.event;
+  function setupBridge() {
+    const { invoke } = window.__TAURI__.core;
+    const { listen } = window.__TAURI__.event;
 
-  // ============================================================================
-  // Message Bridge: Page ↔ Tauri Backend
-  // ============================================================================
+    // ============================================================================
+    // Message Bridge: Page ↔ Tauri Backend
+    // ============================================================================
 
-  // Listen for RPC requests from page context
-  window.addEventListener('message', async (event) => {
-    // Only process our messages
-    if (!event.data || event.data.type !== 'VAUGHAN_RPC_REQUEST') {
+    // Listen for RPC requests from page context (VaughanProvider)
+    window.addEventListener('message', async (event) => {
+      // Only process our messages
+      if (!event.data || event.data.type !== 'VAUGHAN_RPC_REQUEST') {
+        return;
+      }
+
+      const { id, method, params } = event.data;
+
+      // Use injected window label (set by initialization_script before page loads)
+      const windowLabel = window.__VAUGHAN_WINDOW_LABEL__
+        || window.__TAURI_METADATA__?.currentWindow?.label
+        || 'unknown';
+
+      const origin = window.__VAUGHAN_ORIGIN__ || window.location.origin;
+
+      // Normalize params to always be an array
+      const normalizedParams = !params ? [] : Array.isArray(params) ? params : [params];
+
+      try {
+        // CSP-SAFE INVOKE: Try standard invoke, but handle fetch failures gracefully
+        let result;
+        try {
+          result = await invoke('handle_dapp_request', {
+            windowLabel: windowLabel,
+            origin: origin,
+            method,
+            params: normalizedParams
+          });
+        } catch (error) {
+          // If fetch fails (likely CSP), we might be in the middle of a Tauri fallback
+          // or we need to catch it and notify the user/retry.
+          // In Tauri 2.0, 'Failed to fetch' is the hallmark of CSP blocking ipc.localhost
+          if (error.toString().includes('Failed to fetch') || error.toString().includes('CSP')) {
+            console.warn('[Vaughan-IPC] Standard invoke blocked by CSP. Attempting native fallback...');
+
+            // On Windows (WebView2), we can try to use the postMessage interface directly
+            // which handles the message in the backend's on_message handler if configured.
+            // However, Tauri's invoke already attempts this internally.
+            // If we are here, it means the internal fallback also failed or produced an error.
+            throw new Error('IPC blocked by Content Security Policy. This dApp (like Hyperliquid) requires Direct Mode or a hardened RPC Proxy.');
+          }
+          throw error;
+        }
+
+        // Send response back to page context
+        window.postMessage({
+          type: 'VAUGHAN_RPC_RESPONSE',
+          id,
+          result
+        }, '*');
+      } catch (error) {
+        console.error('[Vaughan-IPC] RPC Error:', error);
+
+        // Send error back to page context
+        window.postMessage({
+          type: 'VAUGHAN_RPC_ERROR',
+          id,
+          error: {
+            code: -32000,
+            message: error.toString()
+          }
+        }, '*');
+      }
+    });
+    // Listen for events from Tauri backend
+    listen('wallet_event', (event) => {
+      console.log('[Vaughan-IPC] Wallet Event:', event.payload);
+
+      // Forward to page context
+      window.postMessage({
+        type: 'VAUGHAN_WALLET_EVENT',
+        event: event.payload.event,
+        data: event.payload.data
+      }, '*');
+    }).then((unlisten) => {
+      console.log('[Vaughan-IPC] Event listener registered successfully');
+      window.__VAUGHAN_UNLISTEN__ = unlisten;
+    }).catch((error) => {
+      console.error('[Vaughan-IPC] Failed to register event listener:', error);
+    });
+
+    // ============================================================================
+    // Inject Provider into Page Context
+    // ============================================================================
+
+    if (window.ethereum) {
+      console.warn('[Vaughan-Provider] Provider already exists');
       return;
     }
 
-    const { id, method, params } = event.data;
-
-    // Use injected window label (set by initialization_script before page loads)
-    // Fallback to Tauri metadata, then 'unknown'
-    const windowLabel = window.__VAUGHAN_WINDOW_LABEL__
-      || window.__TAURI_METADATA__?.currentWindow?.label
-      || 'unknown';
-
-    const origin = window.__VAUGHAN_ORIGIN__ || window.location.origin;
-
-    console.log('[Vaughan-IPC] RPC Request:', method, params);
-    console.log('[Vaughan-IPC] Window Label:', windowLabel);
-    console.log('[Vaughan-IPC] Origin:', origin);
-
-    // Normalize params to always be an array
-    // Some methods (e.g. wallet_watchAsset) send params as an object,
-    // but the Rust backend expects Vec<Value> (array)
-    const normalizedParams = !params ? [] : Array.isArray(params) ? params : [params];
-
-    try {
-      // Call Tauri backend
-      const result = await invoke('handle_dapp_request', {
-        windowLabel: windowLabel,
-        origin: origin,
-        method,
-        params: normalizedParams
-      });
-
-      // Send response back to page
-      window.postMessage({
-        type: 'VAUGHAN_RPC_RESPONSE',
-        id,
-        result
-      }, '*');
-
-      console.log('[Vaughan-IPC] RPC Response:', result);
-    } catch (error) {
-      console.error('[Vaughan-IPC] RPC Error:', error);
-
-      // Send error back to page
-      window.postMessage({
-        type: 'VAUGHAN_RPC_ERROR',
-        id,
-        error: {
-          code: -32000,
-          message: error.toString()
-        }
-      }, '*');
-    }
-  });
-
-  // Listen for events from Tauri backend
-  // In Tauri V2, event.listen returns a Promise that resolves to an unlisten function.
-  // We don't await it here at the top level to avoid blocking provider injection,
-  // but we handle the promise correctly.
-  listen('wallet_event', (event) => {
-    console.log('[Vaughan-IPC] Wallet Event:', event.payload);
-
-    // Forward to page context
-    window.postMessage({
-      type: 'VAUGHAN_WALLET_EVENT',
-      event: event.payload.event,
-      data: event.payload.data
-    }, '*');
-  }).then((unlisten) => {
-    console.log('[Vaughan-IPC] Event listener registered successfully');
-    window.__VAUGHAN_UNLISTEN__ = unlisten;
-  }).catch((error) => {
-    console.error('[Vaughan-IPC] Failed to register event listener. Tauri APIs might be restricted:', error);
-  });
-
-  // ============================================================================
-  // Inject Provider into Page Context (Direct injection, no script tag)
-  // ============================================================================
-
-  // Since we're already in privileged context, we can directly define the provider
-  // This bypasses CSP because initialization_script runs before CSP is applied
-
-  console.log('[Vaughan-Provider] Initializing EIP-1193 provider...');
-
-  // Prevent re-injection
-  if (window.ethereum) {
-    console.warn('[Vaughan-Provider] Provider already exists');
-    return;
-  }
-
-  // ============================================================================
-  // Event Emitter
-  // ============================================================================
-
-  class EventEmitter {
-    constructor() {
-      this._events = {};
-    }
-
-    on(event, listener) {
-      if (!this._events[event]) {
-        this._events[event] = [];
+    // Event Emitter Implementation
+    class EventEmitter {
+      constructor() {
+        this._events = {};
       }
-      this._events[event].push(listener);
-      return this;
+      on(event, listener) {
+        if (!this._events[event]) this._events[event] = [];
+        this._events[event].push(listener);
+        return this;
+      }
+      removeListener(event, listener) {
+        if (!this._events[event]) return this;
+        this._events[event] = this._events[event].filter(l => l !== listener);
+        return this;
+      }
+      emit(event, ...args) {
+        if (!this._events[event]) return false;
+        this._events[event].forEach(listener => {
+          try { listener(...args); } catch (error) { console.error('[Vaughan-Provider] Event error:', error); }
+        });
+        return true;
+      }
     }
 
-    removeListener(event, listener) {
-      if (!this._events[event]) return this;
-      this._events[event] = this._events[event].filter(l => l !== listener);
-      return this;
-    }
+    // Ethereum Provider Implementation
+    class VaughanProvider extends EventEmitter {
+      constructor() {
+        super();
+        this.isVaughan = true;
+        this.isMetaMask = true;
+        this._chainId = null;
+        this._accounts = [];
+        this._isConnected = false;
+        this._requestId = 0;
+        this._pendingRequests = new Map();
 
-    emit(event, ...args) {
-      if (!this._events[event]) return false;
-      this._events[event].forEach(listener => {
+        this._setupMessageListener();
+
+        // Give the bridge a moment to fully stabilize before first request
+        setTimeout(() => this._initialize(), 100);
+      }
+
+      _setupMessageListener() {
+        window.addEventListener('message', (event) => {
+          const { data } = event;
+          if (!data) return;
+
+          if (data.type === 'VAUGHAN_RPC_RESPONSE') {
+            const pending = this._pendingRequests.get(data.id);
+            if (pending) {
+              this._pendingRequests.delete(data.id);
+              pending.resolve(data.result);
+            }
+          } else if (data.type === 'VAUGHAN_RPC_ERROR') {
+            const pending = this._pendingRequests.get(data.id);
+            if (pending) {
+              this._pendingRequests.delete(data.id);
+              pending.reject(new Error(data.error?.message || 'Unknown error'));
+            }
+          } else if (data.type === 'VAUGHAN_WALLET_EVENT') {
+            this._handleWalletEvent(data.event, data.data);
+          }
+        });
+      }
+
+      _handleWalletEvent(event, data) {
+        console.log('[Vaughan-Provider] Wallet event:', event, data);
+        switch (event) {
+          case 'accountsChanged':
+            this._accounts = data;
+            this.emit('accountsChanged', data);
+            break;
+          case 'chainChanged':
+            this._chainId = data;
+            this.emit('chainChanged', data);
+            break;
+          case 'connect':
+            this._isConnected = true;
+            this.emit('connect', { chainId: data });
+            break;
+          case 'disconnect':
+            this._isConnected = false;
+            this.emit('disconnect');
+            break;
+        }
+      }
+
+      async _initialize() {
         try {
-          listener(...args);
-        } catch (error) {
-          console.error('[Vaughan-Provider] Event listener error:', error);
-        }
-      });
-      return true;
-    }
-  }
-
-  // ============================================================================
-  // Ethereum Provider
-  // ============================================================================
-
-  class VaughanProvider extends EventEmitter {
-    constructor() {
-      super();
-
-      // Provider metadata
-      this.isVaughan = true;
-      this.isMetaMask = true; // For compatibility
-
-      // State
-      this._chainId = null;
-      this._accounts = [];
-      this._isConnected = false;
-
-      // Request tracking
-      this._requestId = 0;
-      this._pendingRequests = new Map();
-
-      // Setup message listener
-      this._setupMessageListener();
-
-      // Initialize
-      this._initialize();
-    }
-
-    _setupMessageListener() {
-      window.addEventListener('message', (event) => {
-        const { data } = event;
-
-        // Handle RPC responses
-        if (data.type === 'VAUGHAN_RPC_RESPONSE') {
-          const pending = this._pendingRequests.get(data.id);
-          if (pending) {
-            this._pendingRequests.delete(data.id);
-            pending.resolve(data.result);
-          }
-        }
-
-        // Handle RPC errors
-        if (data.type === 'VAUGHAN_RPC_ERROR') {
-          const pending = this._pendingRequests.get(data.id);
-          if (pending) {
-            this._pendingRequests.delete(data.id);
-            pending.reject(new Error(data.error.message));
-          }
-        }
-
-        // Handle wallet events
-        if (data.type === 'VAUGHAN_WALLET_EVENT') {
-          this._handleWalletEvent(data.event, data.data);
-        }
-      });
-    }
-
-    _handleWalletEvent(event, data) {
-      console.log('[Vaughan-Provider] Wallet event:', event, data);
-
-      switch (event) {
-        case 'accountsChanged':
-          this._accounts = data;
-          this.emit('accountsChanged', data);
-          break;
-
-        case 'chainChanged':
-          this._chainId = data;
-          this.emit('chainChanged', data);
-          break;
-
-        case 'connect':
+          const chainId = await this.request({ method: 'eth_chainId' });
+          this._chainId = chainId;
           this._isConnected = true;
-          this.emit('connect', { chainId: data });
-          break;
+          this.emit('connect', { chainId });
 
-        case 'disconnect':
-          this._isConnected = false;
-          this.emit('disconnect');
-          break;
-      }
-    }
-
-    async _initialize() {
-      try {
-        console.log('[Vaughan-Provider] Initializing...');
-
-        // Get initial chain ID
-        const chainId = await this.request({ method: 'eth_chainId' });
-        this._chainId = chainId;
-        this._isConnected = true;
-
-        console.log('[Vaughan-Provider] Initialized with chainId:', chainId);
-
-        // Emit connect event
-        this.emit('connect', { chainId });
-
-        // Check for existing accounts (auto-connect)
-        try {
           const accounts = await this.request({ method: 'eth_accounts' });
           if (accounts && accounts.length > 0) {
             this._accounts = accounts;
-            console.log('[Vaughan-Provider] Auto-connected with accounts:', accounts);
+            this.emit('accountsChanged', accounts);
           }
         } catch (error) {
-          console.log('[Vaughan-Provider] No existing accounts');
+          console.warn('[Vaughan-Provider] Initialization partial failure:', error);
+          this._chainId = '0x171'; // Fallback to PulseChain
         }
-      } catch (error) {
-        console.error('[Vaughan-Provider] Initialization failed:', error);
-        this._chainId = '0x171'; // PulseChain default
-        this._isConnected = false;
+      }
+
+      async request(args) {
+        if (!args || typeof args !== 'object' || !args.method) {
+          throw new Error('Invalid request args');
+        }
+        const { method, params = [] } = args;
+        const id = ++this._requestId;
+
+        return new Promise((resolve, reject) => {
+          this._pendingRequests.set(id, { resolve, reject });
+          window.postMessage({
+            type: 'VAUGHAN_RPC_REQUEST',
+            id,
+            method,
+            params
+          }, '*');
+
+          // Timeout after 60 seconds
+          setTimeout(() => {
+            if (this._pendingRequests.has(id)) {
+              this._pendingRequests.delete(id);
+              reject(new Error('Request timeout'));
+            }
+          }, 60000);
+        });
+      }
+
+      sendAsync(payload, callback) {
+        this.request({ method: payload.method, params: payload.params })
+          .then(result => callback(null, { id: payload.id, jsonrpc: '2.0', result }))
+          .catch(error => callback(error, null));
+      }
+
+      send(methodOrPayload, paramsOrCallback) {
+        if (typeof methodOrPayload === 'string') {
+          return this.request({ method: methodOrPayload, params: paramsOrCallback });
+        } else if (typeof paramsOrCallback === 'function') {
+          return this.sendAsync(methodOrPayload, paramsOrCallback);
+        } else {
+          return this.request(methodOrPayload);
+        }
       }
     }
 
-    /**
-     * EIP-1193 request method
-     */
-    async request(args) {
-      if (!args || typeof args !== 'object') {
-        throw new Error('Request must be an object');
-      }
-      if (!args.method) {
-        throw new Error('Request must have a method');
-      }
+    // Inject Provider
+    const provider = new VaughanProvider();
+    Object.defineProperty(window, 'ethereum', {
+      value: provider,
+      writable: false,
+      configurable: false
+    });
 
-      const { method, params = [] } = args;
+    console.log('[Vaughan-Provider] Provider injected successfully ✅');
 
-      console.log('[Vaughan-Provider] Request:', method, params);
+    // EIP-6963 Discovery
+    const announceProvider = () => {
+      window.dispatchEvent(new CustomEvent('eip6963:announceProvider', {
+        detail: Object.freeze({
+          info: Object.freeze({
+            uuid: '350670db-19fa-4704-a166-e52e178b59d2',
+            name: 'Vaughan Wallet',
+            icon: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8cmVjdCB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHJ4PSI4IiBmaWxsPSIjNEY0NkU1Ii8+CiAgPHBhdGggZD0iTTE2IDhMMjQgMTZMMTYgMjRMOCAxNkwxNiA4WiIgZmlsbD0id2hpdGUiLz4KICA8cGF0aCBkPSJNMTYgMTJMMjAgMTZMMTYgMjBMMTIgMTZMMTYgMTJaIiBmaWxsPSIjNEY0NkU1Ii8+Cjwvc3ZnPg==',
+            rdns: 'io.vaughan.wallet'
+          }),
+          provider: provider
+        })
+      }));
+    };
 
-      // Generate request ID
-      const id = ++this._requestId;
-
-      // Handle custom local logic before forwarding to IPC if needed
-      // but standard EIP-1193 delegates eth_requestAccounts upstream to the wallet!
-
-      // Send request via postMessage
-      return new Promise((resolve, reject) => {
-        // Store pending request
-        this._pendingRequests.set(id, { resolve, reject });
-
-        // Send to bridge
-        window.postMessage({
-          type: 'VAUGHAN_RPC_REQUEST',
-          id,
-          method,
-          params
-        }, '*');
-
-        // Timeout after 60 seconds (approvals can take time!)
-        setTimeout(() => {
-          if (this._pendingRequests.has(id)) {
-            this._pendingRequests.delete(id);
-            reject(new Error('Request timeout - user ignored or wallet busy'));
-          }
-        }, 60000);
-      });
-    }
-
-    /**
-     * Legacy enable method
-     */
-    async enable() {
-      console.log('[Vaughan-Provider] Legacy enable() called');
-      return this.request({ method: 'eth_requestAccounts' });
-    }
-
-    /**
-     * Legacy sendAsync method
-     */
-    sendAsync(payload, callback) {
-      this.request({
-        method: payload.method,
-        params: payload.params
-      })
-        .then(result => callback(null, { id: payload.id, jsonrpc: '2.0', result }))
-        .catch(error => callback(error, null));
-    }
-
-    /**
-     * Legacy send method
-     */
-    send(methodOrPayload, paramsOrCallback) {
-      if (typeof methodOrPayload === 'string') {
-        return this.request({ method: methodOrPayload, params: paramsOrCallback });
-      } else if (typeof paramsOrCallback === 'function') {
-        return this.sendAsync(methodOrPayload, paramsOrCallback);
-      } else {
-        return this.request(methodOrPayload);
-      }
-    }
-  }
-
-  // ============================================================================
-  // Initialize Provider
-  // ============================================================================
-
-  const provider = new VaughanProvider();
-
-  // Inject into window
-  Object.defineProperty(window, 'ethereum', {
-    value: provider,
-    writable: false,
-    configurable: false
-  });
-
-  console.log('[Vaughan-Provider] Provider injected successfully ✅');
-
-  // ============================================================================
-  // EIP-6963: Multi Injected Provider Discovery
-  // ============================================================================
-
-  const providerInfo = Object.freeze({
-    uuid: '350670db-19fa-4704-a166-e52e178b59d2',
-    name: 'Vaughan Wallet',
-    icon: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8cmVjdCB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHJ4PSI4IiBmaWxsPSIjNEY0NkU1Ii8+CiAgPHBhdGggZD0iTTE2IDhMMjQgMTZMMTYgMjRMOCAxNkwxNiA4WiIgZmlsbD0id2hpdGUiLz4KICA8cGF0aCBkPSJNMTYgMTJMMjAgMTZMMTYgMjBMMTIgMTZMMTYgMTJaIiBmaWxsPSIjNEY0NkU1Ii8+Cjwvc3ZnPg==',
-    rdns: 'io.vaughan.wallet'
-  });
-
-  const providerDetail = Object.freeze({
-    info: providerInfo,
-    provider: provider
-  });
-
-  function announceProvider() {
-    window.dispatchEvent(
-      new CustomEvent('eip6963:announceProvider', {
-        detail: providerDetail
-      })
-    );
-  }
-
-  // Announce provider
-  announceProvider();
-
-  // Listen for discovery requests
-  window.addEventListener('eip6963:requestProvider', () => {
     announceProvider();
-  });
+    window.addEventListener('eip6963:requestProvider', announceProvider);
 
-  console.log('[Vaughan-Provider] EIP-6963 announcement sent ✅');
-  console.log('[Vaughan-IPC] Provider initialization complete ✅');
+    console.log('[Vaughan-IPC] Initialization complete ✅');
+  }
+
+  waitForTauri(setupBridge);
 })();

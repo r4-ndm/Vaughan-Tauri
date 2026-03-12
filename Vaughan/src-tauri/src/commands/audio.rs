@@ -3,11 +3,13 @@ use crate::state::VaughanState;
 use tauri::State;
 
 #[tauri::command]
+#[specta::specta]
 pub async fn play_sound(state: State<'_, VaughanState>, alert: AlertSound) -> Result<(), String> {
     state.sound_player.play(alert).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn update_sound_config(
     state: State<'_, VaughanState>,
     config: SoundConfig,
@@ -19,11 +21,13 @@ pub async fn update_sound_config(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn get_sound_config(state: State<'_, VaughanState>) -> Result<SoundConfig, String> {
     state.sound_player.get_config().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn test_sound(state: State<'_, VaughanState>, alert: AlertSound) -> Result<(), String> {
     // Test sound playback
     play_sound(state, alert).await

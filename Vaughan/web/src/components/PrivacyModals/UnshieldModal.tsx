@@ -55,6 +55,14 @@ export function UnshieldModal({
 
         setError("");
         setIsUnshielding(true);
+
+        // Ensure Railgun wallet is loaded
+        if (!railgunClient.railgunAddress) {
+            setError("Railgun wallet not initialized. Please lock and unlock your wallet.");
+            setIsUnshielding(false);
+            return;
+        }
+
         // Lock the UI context while generating Snarks
         onRequiresProof(true);
 
@@ -62,20 +70,27 @@ export function UnshieldModal({
             const isNative = selectedAsset === "native";
             const tokenAddr = isNative ? "" : selectedAsset;
 
+            // Get correct decimals for parsing
+            const decimals = isNative ? 18 : tokens.find((t) => t.address === selectedAsset)?.decimals ?? 18;
+
+            // Dynamically import ethers only when needed to keep the modal lightweight
+            const { parseUnits } = await import("ethers");
+            const amountWei = parseUnits(amount, decimals).toString();
+
             // Simple map of chainId to Railgun Network string
             const networkNameStr = chainId === 1 ? 'Ethereum'
                 : chainId === 137 ? 'Polygon'
-                    : chainId === 56 ? 'BNBChain'
+                    : chainId === 56 ? 'BNB_Chain'
                         : chainId === 42161 ? 'Arbitrum'
-                            : chainId === 11155111 ? 'EthereumSepolia'
-                                : chainId === 80002 ? 'PolygonAmoy'
+                            : chainId === 11155111 ? 'Ethereum_Sepolia'
+                                : chainId === 80002 ? 'Polygon_Amoy'
                                     : 'Ethereum';
 
             const txResponse = await railgunClient.generateUnshieldTransaction(
                 networkNameStr,
                 isNative,
                 tokenAddr,
-                amount,
+                amountWei,
                 publicFallback || recipient,
                 encryptionKey
             );

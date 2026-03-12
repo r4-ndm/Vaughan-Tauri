@@ -1,6 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 use alloy::primitives::Address;
 use serde::{Deserialize, Serialize};
+use specta::Type;
 
 /// Type alias for session key (window_label is now part of the key)
 /// This ensures sessions are isolated per window
@@ -35,6 +36,34 @@ pub struct DappConnection {
 
     /// Auto-approved connection (wallet opened the dApp)
     pub auto_approved: bool,
+}
+
+/// dApp connection shape for IPC/TypeScript (accounts as string list).
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct DappConnectionExport {
+    pub window_label: String,
+    pub origin: String,
+    pub name: Option<String>,
+    pub icon: Option<String>,
+    pub accounts: Vec<String>,
+    pub connected_at: u64,
+    pub last_activity: u64,
+    pub auto_approved: bool,
+}
+
+impl From<DappConnection> for DappConnectionExport {
+    fn from(c: DappConnection) -> Self {
+        Self {
+            window_label: c.window_label,
+            origin: c.origin,
+            name: c.name,
+            icon: c.icon,
+            accounts: c.accounts.iter().map(|a| format!("{:?}", a)).collect(),
+            connected_at: c.connected_at,
+            last_activity: c.last_activity,
+            auto_approved: c.auto_approved,
+        }
+    }
 }
 
 impl DappConnection {

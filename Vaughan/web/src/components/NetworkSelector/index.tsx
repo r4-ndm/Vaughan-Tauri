@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ChevronDown, Plus, X } from 'lucide-react';
-import { invoke } from '@tauri-apps/api/core';
+import { NetworkService } from '../../services/tauri';
 
 interface NetworkConfig {
     id: string;
@@ -59,12 +59,10 @@ export const NetworkSelector: React.FC<NetworkSelectorProps> = ({
         setError('');
         try {
             const networkId = `custom-${chainId}`;
-            await invoke('switch_network', {
-                request: {
-                    network_id: networkId,
-                    rpc_url: form.rpc_url.trim(),
-                    chain_id: chainId,
-                }
+            await NetworkService.switchNetwork({
+                network_id: networkId,
+                rpc_url: form.rpc_url.trim(),
+                chain_id: chainId,
             });
             // Notify parent with a synthetic NetworkConfig so it refreshes
             onSwitchNetwork?.({

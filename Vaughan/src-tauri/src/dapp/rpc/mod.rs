@@ -40,7 +40,7 @@ pub async fn handle_request(
     // Route to appropriate handler
     match method {
         // Account Management
-        "eth_requestAccounts" => eth::handle_request_accounts(state, window_label, origin).await,
+        "eth_requestAccounts" => eth::handle_request_accounts(app, state, window_label, origin).await,
         "eth_accounts" => eth::handle_accounts(state, window_label, origin).await,
 
         // Network Info

@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, ExternalLink, Search, Plus } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -7,6 +6,7 @@ import { Layout } from "../components/Layout";
 import { NetworkSelector } from "../components/NetworkSelector";
 import { AccountSelector } from "../components/AccountSelector";
 
+import { NetworkService, WalletService, DappService } from "../services/tauri";
 import { WHITELISTED_DAPPS } from "../utils/whitelistedDapps";
 
 interface DApp {
@@ -17,26 +17,7 @@ interface DApp {
     category: string;
     launchExecutable?: string;
     chains: number[];
-}
-
-interface Account {
-    address: string;
-    name: string;
-    path: string;
-    account_type: string;
-    index?: number;
-}
-
-interface NetworkInfo {
-    network_id: string;
-    name: string;
-    chain_id: number;
-    rpc_url: string;
-    native_token: {
-        symbol: string;
-        name: string;
-        decimals: number;
-    };
+    useProxy?: boolean;
 }
 
 // Convert WHITELISTED_DAPPS to DApp interface
@@ -48,7 +29,8 @@ const coreDapps: DApp[] = WHITELISTED_DAPPS.map(dapp => ({
     launchExecutable: dapp.launchExecutable,
     chains: dapp.chains,
     // Capitalize category for display
-    category: dapp.category.charAt(0).toUpperCase() + dapp.category.slice(1).replace('Defi', 'DeFi').replace('Nft', 'NFT').replace('Dex', 'DEX')
+    category: dapp.category.charAt(0).toUpperCase() + dapp.category.slice(1).replace('Defi', 'DeFi').replace('Nft', 'NFT').replace('Dex', 'DEX'),
+    useProxy: dapp.useProxy
 }));
 
 export default function DApps() {
@@ -75,28 +57,35 @@ export default function DApps() {
 
     const { data: network, isLoading: isNetworkLoading } = useQuery({
         queryKey: ["network"],
-        queryFn: async () => invoke<NetworkInfo>("get_network_info"),
+        queryFn: async () => {
+            try {
+                const n = await NetworkService.getNetworkInfo();
+                return { network_id: n.id, name: n.name, chain_id: n.chain_id, rpc_url: n.rpc_url, native_token: { symbol: n.currency_symbol, name: n.currency_symbol, decimals: 18 } };
+            } catch (error: any) {
+                throw error;
+            }
+        },
     });
 
     const { data: accounts, isLoading: isAccountsLoading } = useQuery({
         queryKey: ["accounts"],
-        queryFn: async () => invoke<Account[]>("get_accounts"),
+        queryFn: async () => {
+            try {
+                return await WalletService.getAccounts();
+            } catch (error: any) {
+                throw error;
+            }
+        },
     });
 
     const { data: supportedNetworks } = useQuery({
         queryKey: ["supported_networks"],
-        queryFn: async () => invoke<any[]>("get_supported_networks"),
+        queryFn: async () => NetworkService.getSupportedNetworks(),
     });
 
     const handleSwitchNetwork = async (net: any) => {
         try {
-            await invoke("switch_network", {
-                request: {
-                    network_id: net.id,
-                    rpc_url: net.rpc_url,
-                    chain_id: net.chain_id,
-                }
-            });
+            await NetworkService.switchNetwork({ network_id: net.id, rpc_url: net.rpc_url, chain_id: net.chain_id });
             queryClient.invalidateQueries({ queryKey: ["network"] });
         } catch (e) {
             console.error("Failed to switch network:", e);
@@ -105,7 +94,7 @@ export default function DApps() {
 
     const handleSelectAccount = async (address: string) => {
         try {
-            await invoke("set_active_account", { address });
+            await WalletService.setActiveAccount(address);
             setActiveAccount(address);
             queryClient.invalidateQueries({ queryKey: ["balance"] });
         } catch (e) {
@@ -117,7 +106,7 @@ export default function DApps() {
         if (accounts && accounts.length > 0 && !activeAccount) {
             const defaultAddress = accounts[0].address;
             setActiveAccount(defaultAddress);
-            invoke("set_active_account", { address: defaultAddress }).catch(e =>
+            WalletService.setActiveAccount(defaultAddress).catch(e =>
                 console.error("Failed to sync initial active account to backend:", e)
             );
         }
@@ -126,10 +115,7 @@ export default function DApps() {
     const handleOpenDApp = async (dapp: DApp) => {
         try {
             console.log(`Opening ${dapp.name}...`);
-            await invoke("open_dapp_window", {
-                url: dapp.url,
-                title: dapp.name
-            });
+            await DappService.openDappWindow(dapp.url, dapp.name, dapp.useProxy ?? false);
         } catch (error) {
             console.error("Failed to open dApp:", error);
             alert(`Failed to open dApp: ${error}`);
@@ -140,7 +126,7 @@ export default function DApps() {
         e.stopPropagation(); // Prevent the card's handleOpenDApp from firing
         try {
             console.log(`Launching server at ${exePath}...`);
-            await invoke("launch_external_app", { exePath });
+            await DappService.launchExternalApp(exePath);
         } catch (error) {
             console.error("Failed to launch server:", error);
             alert(`Failed to launch server: ${error}`);
@@ -168,7 +154,8 @@ export default function DApps() {
                 url: formattedUrl,
                 description: "Custom user-added dApp",
                 category: "Custom",
-                chains: [] // Empty chains array means it's available on all networks
+                chains: [], // Empty chains array means it's available on all networks
+                useProxy: false // Default to direct mode for custom URLs unless issues found
             };
 
             // Check for duplicates
@@ -194,10 +181,7 @@ export default function DApps() {
         setIsLaunchingCustom(true);
         try {
             console.log(`Opening custom dApp URL: ${formattedUrl}`);
-            await invoke("open_dapp_window", {
-                url: formattedUrl,
-                title: new URL(formattedUrl).hostname // Use domain as title
-            });
+            await DappService.openDappWindow(formattedUrl, new URL(formattedUrl).hostname, false);
             // We do not save to list automatically on launch, user must click +
         } catch (error) {
             console.error("Failed to open custom URL:", error);

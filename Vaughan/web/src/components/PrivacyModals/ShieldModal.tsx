@@ -45,24 +45,47 @@ export function ShieldModal({
         setIsShielding(true);
         setError("");
 
+        // Ensure Railgun wallet is loaded
+        if (!railgunClient.railgunAddress) {
+            try {
+                // If it's missing, maybe it was never loaded. Password would be needed here,
+                // but usually it's loaded on Unlock. We'll show an error if it's truly missing.
+                setError("Railgun wallet not initialized. Please lock and unlock your wallet.");
+                setIsShielding(false);
+                return;
+            } catch (e) {
+                setError("Could not initialize Railgun address.");
+                setIsShielding(false);
+                return;
+            }
+        }
+
         try {
             const isNative = selectedAsset === "native";
             const tokenAddr = isNative ? "" : selectedAsset;
 
+            // Get correct decimals for parsing
+            const decimals = isNative ? 18 : tokens.find((t) => t.address === selectedAsset)?.decimals ?? 18;
+
+            // Dynamically import ethers only when needed to keep the modal lightweight
+            const { parseUnits } = await import("ethers");
+            // Parse user input decimal amount to a BigInt string (Wei)
+            const amountWei = parseUnits(amount, decimals).toString();
+
             // Simple map of chainId to Railgun Network string
             const networkNameStr = chainId === 1 ? 'Ethereum'
                 : chainId === 137 ? 'Polygon'
-                    : chainId === 56 ? 'BNBChain'
+                    : chainId === 56 ? 'BNB_Chain'
                         : chainId === 42161 ? 'Arbitrum'
-                            : chainId === 11155111 ? 'EthereumSepolia'
-                                : chainId === 80002 ? 'PolygonAmoy'
+                            : chainId === 11155111 ? 'Ethereum_Sepolia'
+                                : chainId === 80002 ? 'Polygon_Amoy'
                                     : 'Ethereum';
 
             const txResponse = await railgunClient.populateShieldTransaction(
                 networkNameStr,
                 isNative,
                 tokenAddr,
-                amount,
+                amountWei,
                 railgunClient.railgunAddress || ""
             );
 

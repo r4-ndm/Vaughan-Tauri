@@ -1,6 +1,4 @@
 import { useState, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Layout } from "../components/Layout";
@@ -13,7 +11,7 @@ import {
     getTokenBalance,
     TrackedToken
 } from "../services/token";
-import { PreferencesService } from "../services/tauri";
+import { PreferencesService, NetworkService, WalletService } from "../services/tauri";
 import { railgunClient } from "../services/railgunWorkerClient";
 import { Shield, Globe, ArrowRight } from "lucide-react";
 import { ShieldModal } from "../components/PrivacyModals/ShieldModal";
@@ -22,32 +20,8 @@ import { TransferModal } from "../components/PrivacyModals/TransferModal";
 import { ZkProofLoader } from "../components/PrivacyModals/ZkProofLoader";
 
 import { AddTokenModal } from "../components/AddTokenModal";
+import { events } from "../bindings/tauri-commands";
 
-interface Account {
-    address: string;
-    name: string;
-    path: string;
-    account_type: string;
-    index?: number;
-}
-
-interface NetworkInfo {
-    network_id: string;
-    name: string;
-    chain_id: number;
-    rpc_url: string;
-    native_token: {
-        symbol: string;
-        name: string;
-        decimals: number;
-    };
-}
-
-interface BalanceResponse {
-    balance_wei: string;
-    balance_eth: string;
-    symbol: string;
-}
 
 const formatBalance = (bal: string | undefined) => {
     if (!bal) return "0.00";
@@ -105,28 +79,41 @@ export default function Dashboard() {
 
     const { data: network, isLoading: isNetworkLoading } = useQuery({
         queryKey: ["network"],
-        queryFn: async () => invoke<NetworkInfo>("get_network_info"),
+        queryFn: async () => {
+            try {
+                const n = await NetworkService.getNetworkInfo();
+                return {
+                    network_id: n.id,
+                    name: n.name,
+                    chain_id: n.chain_id,
+                    rpc_url: n.rpc_url,
+                    native_token: { symbol: n.currency_symbol, name: n.currency_symbol, decimals: 18 },
+                };
+            } catch (error: any) {
+                throw error;
+            }
+        },
     });
 
     const { data: accounts, isLoading: isAccountsLoading } = useQuery({
         queryKey: ["accounts"],
-        queryFn: async () => invoke<Account[]>("get_accounts"),
+        queryFn: async () => {
+            try {
+                return await WalletService.getAccounts();
+            } catch (error: any) {
+                throw error;
+            }
+        },
     });
 
     const { data: supportedNetworks } = useQuery({
         queryKey: ["supported_networks"],
-        queryFn: async () => invoke<any[]>("get_supported_networks"),
+        queryFn: async () => NetworkService.getSupportedNetworks(),
     });
 
     const handleSwitchNetwork = async (net: any) => {
         try {
-            await invoke("switch_network", {
-                request: {
-                    network_id: net.id,
-                    rpc_url: net.rpc_url,
-                    chain_id: net.chain_id,
-                }
-            });
+            await NetworkService.switchNetwork({ network_id: net.id, rpc_url: net.rpc_url, chain_id: net.chain_id });
             queryClient.invalidateQueries({ queryKey: ["network"] });
         } catch (e) {
             console.error("Failed to switch network:", e);
@@ -135,7 +122,7 @@ export default function Dashboard() {
 
     const handleSelectAccount = async (address: string) => {
         try {
-            await invoke("set_active_account", { address });
+            await WalletService.setActiveAccount(address);
             setActiveAccount(address);
             // Refresh balance once account is switched
             queryClient.invalidateQueries({ queryKey: ["balance"] });
@@ -148,7 +135,7 @@ export default function Dashboard() {
         if (accounts && accounts.length > 0 && !activeAccount) {
             const defaultAddress = accounts[0].address;
             setActiveAccount(defaultAddress);
-            invoke("set_active_account", { address: defaultAddress }).catch(e =>
+            WalletService.setActiveAccount(defaultAddress).catch(e =>
                 console.error("Failed to sync initial active account to backend:", e)
             );
         }
@@ -173,14 +160,14 @@ export default function Dashboard() {
 
     // 🎯 Inform backend about the focused asset for optimized monitoring
     useEffect(() => {
-        invoke("set_focused_asset", { asset: selectedAsset }).catch(err => {
+        WalletService.setFocusedAsset(selectedAsset).catch(err => {
             console.warn("[Vaughan] Failed to sync focused asset to backend:", err);
         });
     }, [selectedAsset]);
 
-    // 🔔 Listen for balance refresh signals from backend
+    // 🔔 Listen for balance refresh signals from backend (typed event)
     useEffect(() => {
-        const unlistenRefresh = listen("refresh-balance", () => {
+        const unlistenRefresh = events.refreshBalanceEvent.listen(() => {
             console.log("[Dashboard] Refreshing balances due to backend signal");
             queryClient.invalidateQueries({ queryKey: ["balance"] });
             queryClient.invalidateQueries({ queryKey: ["tracked_tokens"] });
@@ -197,7 +184,7 @@ export default function Dashboard() {
         queryKey: ["balance", activeAccount, network?.chain_id],
         queryFn: async () => {
             if (!activeAccount) return null;
-            return invoke<BalanceResponse>("get_balance", { address: activeAccount });
+            return NetworkService.getBalance(activeAccount);
         },
         enabled: !!activeAccount && !!network,
         refetchInterval: 60000,

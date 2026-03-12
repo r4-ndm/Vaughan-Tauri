@@ -61,7 +61,7 @@ use alloy::primitives::Address;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::{debug, info};
+use tracing::{debug, error, info, warn};
 
 pub struct VaughanState {
     // ===== PROVIDER-INDEPENDENT SERVICES (Always Available) =====
@@ -149,7 +149,7 @@ impl VaughanState {
             transaction_service: TransactionService::new(),
             network_service: NetworkService::new(),
             price_service: PriceService::new(),
-            wallet_service: WalletService::new()?,
+            wallet_service: WalletService::new(),
 
             // Provider-dependent adapters (empty, created on-demand)
             evm_adapters: Mutex::new(HashMap::new()),
@@ -174,7 +174,7 @@ impl VaughanState {
             state_manager,
         };
 
-        // Restore active network from persisted state (or fall back to default)
+        // Try to restore active network from persisted state (or fall back to default)
         let network_id = persisted
             .active_network_id
             .unwrap_or_else(|| "pulsechain-testnet-v4".to_string());
@@ -184,14 +184,18 @@ impl VaughanState {
         let chain_id = persisted.active_network_chain_id.unwrap_or(943);
 
         info!(
-            "[VaughanState] Switching to initial network: {}",
+            "[VaughanState] Attempting initial network switch: {}",
             network_id
         );
-        state
-            .switch_network(&network_id, &rpc_url, chain_id)
-            .await?;
-        info!("[VaughanState] Initialization complete.");
 
+        // Use a temporary block to handle errors during initial switch without failing state creation
+        if let Err(e) = state.switch_network(&network_id, &rpc_url, chain_id).await {
+            warn!("[VaughanState] Initial network switch failed (this is expected if wallet is not yet unlocked): {}", e);
+
+            // Even if it fails, we want to set the active network ID so the UI knows what we ARE TRYING to connect to
+            let mut active_network = state.active_network.lock().await;
+            *active_network = Some(network_id);
+        }
         Ok(state)
     }
 
@@ -244,6 +248,7 @@ impl VaughanState {
             let adapter = EvmAdapter::new(rpc_url, network_id.to_string(), chain_id).await?;
             adapters.insert(network_id.to_string(), Arc::new(adapter));
         }
+        let _adapter_count = adapters.len();
         drop(adapters); // Explicitly drop lock prevents deadlock in save_state()
 
         // Update active network
@@ -265,6 +270,27 @@ impl VaughanState {
         )?;
         self.switch_network(&config.id, &config.rpc_url, config.chain_id)
             .await
+    }
+
+    /// Get or create adapter by chain ID
+    pub async fn get_or_create_adapter_by_chain_id(
+        &self,
+        chain_id: u64,
+    ) -> Result<Arc<EvmAdapter>, WalletError> {
+        // Find network info in predefined list
+        let config = self.network_service.find_network_by_chain_id(chain_id).ok_or(
+            WalletError::UnsupportedNetwork(format!("Chain ID {} not supported", chain_id)),
+        )?;
+
+        let mut adapters = self.evm_adapters.lock().await;
+
+        if !adapters.contains_key(&config.id) {
+            // Create new adapter
+            let adapter = EvmAdapter::new(&config.rpc_url, config.id.clone(), chain_id).await?;
+            adapters.insert(config.id.clone(), Arc::new(adapter));
+        }
+
+        Ok(adapters.get(&config.id).cloned().unwrap())
     }
 
     /// Get current network adapter
@@ -293,10 +319,18 @@ impl VaughanState {
             .ok_or(WalletError::NetworkNotInitialized)?;
 
         let adapters = self.evm_adapters.lock().await;
-        adapters
-            .get(network_id)
-            .cloned()
-            .ok_or(WalletError::NetworkNotInitialized)
+        let adapter = adapters.get(network_id).cloned();
+
+        if adapter.is_none() {
+            error!(
+                "[VaughanState] Adapter not found for active network: {}",
+                network_id
+            );
+
+            Err(WalletError::NetworkNotInitialized)
+        } else {
+            Ok(adapter.unwrap())
+        }
     }
 
     /// Get current network ID
@@ -382,7 +416,9 @@ impl VaughanState {
     /// * `Ok(())` - Wallet unlocked successfully
     /// * `Err(WalletError)` - Invalid password or other error
     pub async fn unlock_wallet(&self, password: &str) -> Result<(), WalletError> {
-        self.wallet_service.unlock(password).await
+        let persisted = self.state_manager.load();
+        let accounts_to_restore = persisted.accounts.clone();
+        self.wallet_service.unlock(password, accounts_to_restore).await
     }
 
     /// Check if wallet is locked
@@ -403,7 +439,7 @@ impl VaughanState {
     ///
     /// Called automatically on network/account changes.
     /// Silently ignores errors (non-critical operation).
-    async fn save_state(&self) -> Result<(), WalletError> {
+    pub async fn save_state(&self) -> Result<(), WalletError> {
         let active_network = self.active_network.lock().await;
         let active_account = self.active_account.lock().await;
         let tracked_tokens_map = self.tracked_tokens.lock().await;
@@ -438,6 +474,12 @@ impl VaughanState {
             .values()
             .flat_map(|v| v.clone())
             .collect::<Vec<TrackedToken>>();
+
+        // When unlocked, persist current in-memory accounts; when locked, keep loaded
+        // accounts so we do not overwrite with empty (e.g. on startup before unlock).
+        if !self.wallet_service.is_locked().await {
+            state.accounts = self.wallet_service.get_accounts().await?;
+        }
 
         let result = self.state_manager.save(&state);
         debug!(

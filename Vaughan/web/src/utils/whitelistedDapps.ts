@@ -26,6 +26,8 @@ export interface WhitelistedDapp {
     dateAdded: string;
     /** Optional: Path to local executable to launch before opening */
     launchExecutable?: string;
+    /** Optional: Whether to use the CSP-bypassing proxy (required for sites with strict CSP) */
+    useProxy?: boolean;
 }
 
 /**
@@ -274,5 +276,17 @@ export const WHITELISTED_DAPPS: WhitelistedDapp[] = [
         chains: [369],
         verified: true,
         dateAdded: '2026-03-08',
+    },
+    {
+        id: 'hyperliquid',
+        name: 'Hyperliquid',
+        description: 'Decentralized perpetual exchange with orderbook architecture.',
+        url: 'https://app.hyperliquid.xyz/trade',
+        icon: '🌊',
+        category: 'dex',
+        chains: [42161], // Arbitrum
+        verified: true,
+        dateAdded: '2026-03-09',
+        useProxy: false,
     },
 ];

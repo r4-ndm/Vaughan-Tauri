@@ -1,11 +1,13 @@
 import { RailgunWorkerRequest, RailgunWorkerResponse } from '../workers/railgun.worker';
-import { PreferencesService } from "./tauri";
+import { invoke } from '@tauri-apps/api/core';
+import { PreferencesService, WalletService } from "./tauri";
 
 class RailgunWorkerClient {
     private worker: Worker;
     private messageHandlers: Map<string, { resolve: (val: any) => void; reject: (err: any) => void }>;
     private msgIdCounter: number = 0;
     private engineInitialized: boolean = false;
+    private initPromise: Promise<void> | null = null;
 
     public railgunWalletID?: string;
     public railgunAddress?: string;
@@ -46,6 +48,12 @@ class RailgunWorkerClient {
             return;
         }
 
+        // Handle Tauri Invoke requests from the worker
+        if (type === 'TAURI_INVOKE') {
+            this.handleTauriInvoke(id, payload);
+            return;
+        }
+
         const handler = this.messageHandlers.get(id);
 
         if (!handler) {
@@ -60,6 +68,26 @@ class RailgunWorkerClient {
         }
 
         this.messageHandlers.delete(id);
+    }
+
+    private async handleTauriInvoke(id: string, payload: any) {
+        try {
+            const { cmd, args } = payload;
+            console.log(`[RailgunClient] Proxying Tauri invoke: ${cmd}`, args);
+            const result = await invoke(cmd, args);
+            this.worker.postMessage({
+                id,
+                type: 'TAURI_INVOKE_RESPONSE',
+                payload: { result }
+            } as RailgunWorkerRequest);
+        } catch (err: any) {
+            console.error(`[RailgunClient] Tauri invoke failed for ID ${id}:`, err);
+            this.worker.postMessage({
+                id,
+                type: 'TAURI_INVOKE_RESPONSE',
+                payload: { error: err.message || String(err) }
+            } as RailgunWorkerRequest);
+        }
     }
 
     private handleError(event: ErrorEvent) {
@@ -85,32 +113,45 @@ class RailgunWorkerClient {
 
     public async initEngine(): Promise<void> {
         if (this.engineInitialized) return;
+        if (this.initPromise) {
+            console.log('[RailgunClient] Engine initialization already in progress, waiting...');
+            return this.initPromise;
+        }
 
-        try {
-            const prefs = await PreferencesService.getUserPreferences();
-            if (!prefs.privacy_enabled) {
-                console.log('[RailgunClient] Skipping Railgun engine initialization - Privacy is disabled in settings.');
-                return;
+        this.initPromise = (async () => {
+            try {
+                const prefs = await PreferencesService.getUserPreferences();
+                if (!prefs.privacy_enabled) {
+                    console.log('[RailgunClient] Skipping Railgun engine initialization - Privacy is disabled in settings.');
+                    return;
+                }
+            } catch (e) {
+                console.warn('[RailgunClient] Failed to fetch preferences, defaulting to enabled', e);
             }
-        } catch (e) {
-            console.warn('[RailgunClient] Failed to fetch preferences, defaulting to enabled', e);
-        }
 
-        console.log('[RailgunClient] Initializing Shadow Engine...');
-        try {
-            // Timeout after 15s — WASM loading can hang if files aren't served correctly
-            const initPromise = this.sendRequest('INIT');
-            const timeoutPromise = new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error('Engine init timed out after 15s')), 15000)
-            );
-            await Promise.race([initPromise, timeoutPromise]);
-            this.engineInitialized = true;
-            console.log('[RailgunClient] Shadow Engine initialized successfully.');
-        } catch (err) {
-            console.warn('[RailgunClient] Shadow Engine failed to initialize. Privacy features will be unavailable.', err);
-            // Don't throw — wallet should still work without privacy features
-        }
+            console.log('[RailgunClient] Starting Shadow Engine initialization...');
+            try {
+                // Timeout after 30s for the worker to finish EVERYTHING (DB + Provider + POI)
+                const initMsg = this.sendRequest('INIT');
+                const timeoutPromise = new Promise<never>((_, reject) =>
+                    setTimeout(() => reject(new Error('Engine init timed out after 60s')), 60000)
+                );
+                await Promise.race([initMsg, timeoutPromise]);
+                this.engineInitialized = true;
+                console.log('[RailgunClient] Shadow Engine initialized successfully.');
+            } catch (err) {
+                console.warn('[RailgunClient] Shadow Engine failed to initialize. Privacy features will be unavailable.', err);
+                this.initPromise = null; // Allow retry on failure
+                // Don't throw — wallet should still work without privacy features
+            }
+        })();
+
+        return this.initPromise;
     }
+
+    private lastSetNetworkChainId?: number;
+    private setNetworkPromise: Promise<void> | null = null;
+    private loadWalletPromise: Promise<{ id: string; address: string }> | null = null;
 
     public async loadWallet(password: string): Promise<{ id: string; address: string }> {
         // Try to init engine first, but don't block wallet unlock if it fails
@@ -121,20 +162,38 @@ class RailgunWorkerClient {
             return { id: '', address: '' };
         }
 
-        console.log('[RailgunClient] Fetching Railgun Mnemonic from Citadel...');
-        const { invoke } = await import('@tauri-apps/api/core');
+        // Deduplicate: If we are already loading a wallet, return the existing promise
+        if (this.loadWalletPromise) {
+            console.log('[RailgunClient] Wallet loading already in progress, waiting...');
+            return this.loadWalletPromise;
+        }
 
-        // 1. Ask Rust to derive the 24-word ZK mnemonic from the master seed
-        const mnemonic = await invoke<string>('get_railgun_mnemonic', { password });
+        // If already loaded successfully, return cached info
+        if (this.railgunAddress && this.railgunWalletID) {
+            return { id: this.railgunWalletID, address: this.railgunAddress };
+        }
 
-        // 2. Pass it directly into the Shadow Engine (WebWorker)
-        console.log('[RailgunClient] Mnemonic retrieved, pushing to Worker...');
-        const res = await this.sendRequest('LOAD_WALLET', { mnemonic, encryptionKey: password });
+        this.loadWalletPromise = (async () => {
+            console.log('[RailgunClient] Fetching Railgun Mnemonic from Citadel...');
 
-        this.railgunWalletID = res.payload.id;
-        this.railgunAddress = res.payload.address;
+            try {
+                // 1. Ask Rust to derive the 24-word ZK mnemonic from the master seed
+                const mnemonic = await WalletService.getRailgunMnemonic(password);
 
-        return res.payload;
+                // 2. Pass it directly into the Shadow Engine (WebWorker)
+                console.log('[RailgunClient] Mnemonic retrieved, pushing to Worker...');
+                const res = await this.sendRequest('LOAD_WALLET', { mnemonic, encryptionKey: password });
+
+                this.railgunWalletID = res.payload.id;
+                this.railgunAddress = res.payload.address;
+
+                return { id: res.payload.id, address: res.payload.address };
+            } finally {
+                this.loadWalletPromise = null;
+            }
+        })();
+
+        return this.loadWalletPromise;
     }
 
     // Railgun-supported chain IDs (+ PulseChain custom support + Testnets)
@@ -145,16 +204,34 @@ class RailgunWorkerClient {
             console.warn(`[RailgunClient] Chain ${chainId} is not supported by Railgun. Privacy features disabled for this network.`);
             return;
         }
-        // Fire-and-forget engine init + network setup — don't block the UI
-        this.initEngine().then(async () => {
+
+        // Deduplicate: If already set to this chain or setting it now, skip
+        if (this.lastSetNetworkChainId === chainId) {
+            console.log(`[RailgunClient] Network already set to chain ${chainId}. Skipping.`);
+            return;
+        }
+        if (this.setNetworkPromise) {
+            console.log(`[RailgunClient] Network setup for chain ${chainId} or other in progress. Waiting...`);
+            return this.setNetworkPromise;
+        }
+
+        this.setNetworkPromise = (async () => {
+            await this.initEngine();
             if (!this.engineInitialized) return;
+
+            console.log(`[RailgunClient] Instructing Shadow Engine to lock onto chain ${chainId}...`);
             try {
-                console.log(`[RailgunClient] Instructing Shadow Engine to lock onto chain ${chainId}...`);
                 await this.sendRequest('SET_NETWORK', { chainId });
+                this.lastSetNetworkChainId = chainId;
             } catch (err) {
                 console.warn(`[RailgunClient] Failed to set Railgun network for chain ${chainId}:`, err);
+                this.lastSetNetworkChainId = undefined; // Allow retry
+            } finally {
+                this.setNetworkPromise = null;
             }
-        });
+        })();
+
+        return this.setNetworkPromise;
     }
 
     /**
