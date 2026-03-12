@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Save, RotateCcw, Shield, Globe, Lock, Cpu } from "lucide-react";
+import { ArrowLeft, Save, RotateCcw, Shield, Globe, Lock, Cpu, LayoutGrid } from "lucide-react";
 import { Layout } from "../components/Layout";
 import { PerformanceService, MethodStats, NetworkService, WalletService } from "../services/tauri";
 
@@ -41,6 +41,20 @@ export default function Settings() {
     const [lockTimeout, setLockTimeout] = useState("15");
     const [lockMsg, setLockMsg] = useState("");
 
+    // Hidden dApps count (from localStorage) for "Restore hidden dApps"
+    const [hiddenDappCount, setHiddenDappCount] = useState(0);
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem("vaughan_hidden_dapps");
+            if (raw) {
+                const arr = JSON.parse(raw);
+                setHiddenDappCount(Array.isArray(arr) ? arr.length : 0);
+            }
+        } catch {
+            setHiddenDappCount(0);
+        }
+    }, []);
+
     const handleSaveRpc = async () => {
         if (!rpcUrl.trim()) {
             setRpcMsg("Enter a valid RPC URL");
@@ -77,6 +91,11 @@ export default function Settings() {
         queryClient.clear();
         // Force a hard reload to completely flush React state and re-mount App.tsx
         window.location.href = "/";
+    };
+
+    const handleRestoreHiddenDapps = () => {
+        localStorage.removeItem("vaughan_hidden_dapps");
+        setHiddenDappCount(0);
     };
 
     return (
@@ -183,6 +202,32 @@ export default function Settings() {
                         <Lock className="w-4 h-4" />
                         Lock Wallet Now
                     </button>
+                </section>
+
+                {/* DApps Browser */}
+                <section className="bg-card border border-border rounded-lg p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-1">
+                        <LayoutGrid className="w-4 h-4" />
+                        DApps Browser
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                        Whitelisted dApps you hide in the DApps browser are stored locally. Restore them here to show all whitelisted dApps again.
+                    </p>
+                    {hiddenDappCount > 0 ? (
+                        <div className="flex items-center gap-3">
+                            <span className="text-sm text-muted-foreground">
+                                {hiddenDappCount} hidden dApp{hiddenDappCount !== 1 ? "s" : ""}
+                            </span>
+                            <button
+                                onClick={handleRestoreHiddenDapps}
+                                className="flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary hover:bg-primary/20 text-sm font-medium rounded transition-colors"
+                            >
+                                Restore hidden dApps
+                            </button>
+                        </div>
+                    ) : (
+                        <p className="text-xs text-muted-foreground italic">No hidden dApps.</p>
+                    )}
                 </section>
 
                 {/* Performance Metrics */}

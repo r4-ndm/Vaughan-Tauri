@@ -806,6 +806,18 @@ async setFocusedAsset(asset: string) : Promise<Result<null, WalletError>> {
 }
 },
 /**
+ * Report user activity (click, keydown, focus). Balance watcher uses this to
+ * poll at 3s when active and back off to 5/10/30s when idle.
+ */
+async reportActivity() : Promise<Result<null, null>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("report_activity") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Handle dApp request (single entry point)
  * 
  * **PHASE 3.4**: Now extracts window label and origin from Window parameter

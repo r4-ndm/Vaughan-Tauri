@@ -160,7 +160,7 @@ export const WHITELISTED_DAPPS: WhitelistedDapp[] = [
         name: 'PulseX (Local)',
         description: 'Local PulseX instance - fast and private',
         url: 'http://127.0.0.1:3691',
-        icon: '💓',
+        icon: '/pulsex.png',
         category: 'dex',
         chains: [369, 943], // PulseChain, PulseChain Testnet
         verified: true,
@@ -288,5 +288,16 @@ export const WHITELISTED_DAPPS: WhitelistedDapp[] = [
         verified: true,
         dateAdded: '2026-03-09',
         useProxy: false,
+    },
+    {
+        id: 'asterdex',
+        name: 'Aster DEX',
+        description: 'The next-gen perp DEX for all traders.',
+        url: 'https://www.asterdex.com/en/trade/pro/futures/ASTERUSDT',
+        icon: '⭐',
+        category: 'dex',
+        chains: [1, 42161, 369], // Ethereum, Arbitrum, PulseChain
+        verified: true,
+        dateAdded: '2026-03-11',
     },
 ];

@@ -187,7 +187,8 @@ export default function Dashboard() {
             return NetworkService.getBalance(activeAccount);
         },
         enabled: !!activeAccount && !!network,
-        refetchInterval: 60000,
+        // Native balance: poll every 10s to stay in sync with backend watcher
+        refetchInterval: 10000,
     });
 
     const { data: tokens } = useQuery({
@@ -199,6 +200,14 @@ export default function Dashboard() {
 
     const displayBalance = isShieldMode ? "0.00" : formatBalance(balance?.balance_eth);
     const displaySymbol = isShieldMode ? `${balance?.symbol || "ETH"} (zk)` : balance?.symbol || "ETH";
+
+    const handleGlobalRefresh = () => {
+        // Manual refresh hook: any click in the main dashboard area will
+        // trigger a balance/ token refresh on top of the periodic polling.
+        queryClient.invalidateQueries({ queryKey: ["balance"] });
+        queryClient.invalidateQueries({ queryKey: ["tracked_tokens"] });
+        queryClient.invalidateQueries({ queryKey: ["token_balance"] });
+    };
 
     const handleSendClick = (e: React.FormEvent) => {
         e.preventDefault();
@@ -233,7 +242,10 @@ export default function Dashboard() {
 
     return (
         <Layout showActions={true}>
-            <div className={`space-y-4 transition-colors duration-500 ${isShieldMode ? "bg-primary/5 rounded-xl border border-primary/20 p-2" : ""}`}>
+            <div
+                className={`space-y-4 transition-colors duration-500 ${isShieldMode ? "bg-primary/5 rounded-xl border border-primary/20 p-2" : ""}`}
+                onClick={handleGlobalRefresh}
+            >
 
                 <AddressDisplay address={activeAccount || undefined} />
 
@@ -468,6 +480,8 @@ function SelectedTokenDisplay({ token, account }: { token: TrackedToken; account
         queryKey: ["token_balance", token.address, account],
         queryFn: () => account ? getTokenBalance(token.address, account) : null,
         enabled: !!account,
+        // Selected token balance: poll every 10s
+        refetchInterval: 10000,
     });
 
     return (
@@ -493,7 +507,8 @@ function TokenRow({ token, account, isSelected, onSelect }: {
         queryKey: ["token_balance", token.address, account],
         queryFn: () => account ? getTokenBalance(token.address, account) : null,
         enabled: !!account,
-        refetchInterval: 60000,
+        // Token list rows: share the same 10s polling as the selected token
+        refetchInterval: 10000,
     });
 
 

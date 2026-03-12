@@ -11,10 +11,30 @@ use alloy::eips::eip2718::Encodable2718;
 use alloy::primitives::{Address, U256};
 use alloy::providers::Provider;
 use alloy::rpc::types::TransactionRequest;
+use serde::de::Error;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::str::FromStr;
 use tauri::State;
+
+/// Deserialize Option<u64> from JSON string or number (TS often sends u64 as string).
+fn deserialize_option_u64_from_string_or_number<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum StringOrU64 {
+        S(String),
+        N(u64),
+    }
+    let opt = Option::<StringOrU64>::deserialize(deserializer)?;
+    match opt {
+        None => Ok(None),
+        Some(StringOrU64::N(n)) => Ok(Some(n)),
+        Some(StringOrU64::S(s)) => s.parse::<u64>().map(Some).map_err(D::Error::custom),
+    }
+}
 
 /// Transaction validation request
 #[derive(Debug, Deserialize, Type)]
@@ -23,7 +43,8 @@ pub struct ValidateTransactionRequest {
     pub to: String,
     /// Amount in ETH (human-readable)
     pub amount: String,
-    /// Gas limit (optional)
+    /// Gas limit (optional); accepts string or number from JSON
+    #[serde(default, deserialize_with = "deserialize_option_u64_from_string_or_number")]
     pub gas_limit: Option<u64>,
     /// Token address for ERC20 transfers (optional)
     pub token_address: Option<String>,
@@ -281,6 +302,7 @@ pub struct SendTransactionRequest {
     pub from: String,
     pub to: String,
     pub amount: String,
+    #[serde(default, deserialize_with = "deserialize_option_u64_from_string_or_number")]
     pub gas_limit: Option<u64>,
     pub gas_price_gwei: Option<String>,
     pub password: String,

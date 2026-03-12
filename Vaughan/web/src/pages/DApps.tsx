@@ -42,8 +42,10 @@ export default function DApps() {
 
     // State for user's custom dApps loaded from localStorage
     const [customDapps, setCustomDapps] = useState<DApp[]>([]);
+    // URLs of whitelisted dApps the user has chosen to hide (persisted)
+    const [hiddenDappUrls, setHiddenDappUrls] = useState<string[]>([]);
 
-    // Load custom dApps on mount
+    // Load custom dApps and hidden whitelist on mount
     useEffect(() => {
         try {
             const stored = localStorage.getItem('vaughan_custom_dapps');
@@ -52,6 +54,14 @@ export default function DApps() {
             }
         } catch (e) {
             console.error("Failed to load custom dApps:", e);
+        }
+        try {
+            const hidden = localStorage.getItem('vaughan_hidden_dapps');
+            if (hidden) {
+                setHiddenDappUrls(JSON.parse(hidden));
+            }
+        } catch (e) {
+            console.error("Failed to load hidden dApps:", e);
         }
     }, []);
 
@@ -201,10 +211,11 @@ export default function DApps() {
         );
     }
 
-    // Combine core dApps (filtered by network) with all custom dApps
-    const filteredCoreDapps = network
+    // Combine core dApps (filtered by network and not hidden) with all custom dApps
+    const filteredCoreDapps = (network
         ? coreDapps.filter(dapp => dapp.chains.includes(network.chain_id))
-        : coreDapps;
+        : coreDapps
+    ).filter(dapp => !hiddenDappUrls.includes(dapp.url));
 
     const combinedDapps = [...customDapps, ...filteredCoreDapps];
 
@@ -224,6 +235,20 @@ export default function DApps() {
         const updatedList = customDapps.filter(d => d.url !== urlToRemove);
         setCustomDapps(updatedList);
         localStorage.setItem('vaughan_custom_dapps', JSON.stringify(updatedList));
+    };
+
+    /** Remove any dApp: custom dApps are deleted; whitelisted dApps are hidden (persisted). */
+    const handleRemoveDapp = (e: React.MouseEvent, dapp: DApp) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const isCustom = customDapps.some(d => d.url === dapp.url);
+        if (isCustom) {
+            handleRemoveCustomDapp(e, dapp.url);
+        } else {
+            const updated = [...hiddenDappUrls, dapp.url];
+            setHiddenDappUrls(updated);
+            localStorage.setItem('vaughan_hidden_dapps', JSON.stringify(updated));
+        }
     };
 
     const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>, dappUrl: string, dappIcon?: string) => {
@@ -283,12 +308,12 @@ export default function DApps() {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-3">
                     {combinedDapps.map((dapp) => (
                         <div
                             key={dapp.url}
                             onClick={() => handleOpenDApp(dapp)}
-                            className="bg-card border border-border rounded-xl p-4 hover:border-primary/50 hover:shadow-lg transition-all cursor-pointer group flex flex-col justify-between h-full relative overflow-hidden"
+                            className="bg-card border border-border rounded-none p-4 hover:border-primary/50 hover:shadow-lg transition-all cursor-pointer group flex flex-col justify-between h-full relative overflow-hidden"
                         >
                             <div className="space-y-2">
                                 <div className="flex justify-between items-start">
@@ -324,16 +349,14 @@ export default function DApps() {
                                 </div>
                             </div>
 
-                            {/* Remove button for custom dApps */}
-                            {dapp.category === "Custom" && (
-                                <button
-                                    onClick={(e) => handleRemoveCustomDapp(e, dapp.url)}
-                                    className="absolute top-2 right-10 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-10"
-                                    title="Remove from your list"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
-                                </button>
-                            )}
+                            {/* Remove button for all dApps (custom: delete; whitelisted: hide) */}
+                            <button
+                                onClick={(e) => handleRemoveDapp(e, dapp)}
+                                className="absolute top-2 right-10 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-10"
+                                title={dapp.category === "Custom" ? "Remove from your list" : "Hide from list"}
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+                            </button>
                         </div>
                     ))}
                 </div>
@@ -342,7 +365,7 @@ export default function DApps() {
                 <div className="pt-4 pb-8">
                     <form
                         onSubmit={handleCustomUrlSubmit}
-                        className="bg-card border border-border rounded-xl p-2 flex items-center gap-2 focus-within:border-primary/50 focus-within:shadow-[0_0_15px_rgba(var(--primary),0.2)] transition-all"
+                        className="bg-card border border-border rounded-none p-2 flex items-center gap-2 focus-within:border-primary/50 focus-within:shadow-[0_0_15px_rgba(var(--primary),0.2)] transition-all"
                     >
                         <button
                             type="button"

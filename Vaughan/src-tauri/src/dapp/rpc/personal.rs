@@ -1,7 +1,7 @@
+use alloy::primitives::Address;
 use alloy_dyn_abi::TypedData;
 use crate::error::WalletError;
 use crate::state::VaughanState;
-use crate::chains::ChainAdapter;
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -65,13 +65,19 @@ pub(crate) async fn handle_personal_sign(
         .and_then(|p| p.as_str().map(|s| s.to_string()))
         .ok_or(WalletError::Custom("Password required".to_string()))?;
 
-    let adapter = state.current_adapter().await?;
-    let signature = adapter.sign_message(address_str, &message).await?;
+    // Use WalletService signer instead of adapter-local signer so that
+    // dApp signing works even when the network adapter was created
+    // without an embedded signer.
+    let address = address_str
+        .parse::<Address>()
+        .map_err(|_| WalletError::InvalidAddress(address_str.to_string()))?;
 
-    // Verify password again for safety (adapter doesn't know about password)
-    state.wallet_service.verify_password(&password).await?;
+    let raw_sig = state
+        .wallet_service
+        .sign_message(&address, &message, &password)
+        .await?;
 
-    Ok(serde_json::json!(signature.to_string()))
+    Ok(serde_json::json!(format!("0x{}", hex::encode(raw_sig))))
 }
 
 pub(crate) async fn handle_sign_typed_data_v4(

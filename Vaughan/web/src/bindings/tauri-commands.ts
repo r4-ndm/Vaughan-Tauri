@@ -806,6 +806,18 @@ async setFocusedAsset(asset: string) : Promise<Result<null, WalletError>> {
 }
 },
 /**
+ * Report user activity (click, keydown, focus). Balance watcher uses this to
+ * poll at 3s when active and back off to 5/10/30s when idle.
+ */
+async reportActivity() : Promise<Result<null, null>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("report_activity") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Handle dApp request (single entry point)
  * 
  * **PHASE 3.4**: Now extracts window label and origin from Window parameter
@@ -1593,7 +1605,7 @@ export type RefreshBalanceEvent = null
 /**
  * Send transaction request
  */
-export type SendTransactionRequest = { from: string; to: string; amount: string; gas_limit: string | null; gas_price_gwei: string | null; password: string; token_address: string | null; data: string | null }
+export type SendTransactionRequest = { from: string; to: string; amount: string; gas_limit?: string | null; gas_price_gwei: string | null; password: string; token_address: string | null; data: string | null }
 /**
  * Sign transaction request
  */
@@ -1757,9 +1769,9 @@ to: string;
  */
 amount: string; 
 /**
- * Gas limit (optional)
+ * Gas limit (optional); accepts string or number from JSON
  */
-gas_limit: string | null; 
+gas_limit?: string | null; 
 /**
  * Token address for ERC20 transfers (optional)
  */
@@ -2016,4 +2028,3 @@ function __makeEvents__<T extends Record<string, any>>(
 		},
 	);
 }
-void [TAURI_CHANNEL, __makeEvents__];

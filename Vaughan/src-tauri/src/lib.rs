@@ -19,10 +19,10 @@ use tauri::Manager;
 use tracing::info;
 
 // ============================================================================
-// Type-safe IPC: Builder provides invoke handler and optional TS bindings export
+// Type-safe IPC: Builder provides invoke handler and event registry (mount_events in setup)
 // ============================================================================
 
-fn build_specta_invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static {
+fn build_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
     let builder = tauri_specta::Builder::<tauri::Wry>::new()
         .commands(tauri_specta::collect_commands![
         commands::network::switch_network,
@@ -65,6 +65,7 @@ fn build_specta_invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> b
         commands::wallet::export_private_key,
         commands::wallet::get_railgun_mnemonic,
         commands::wallet::set_focused_asset,
+        commands::wallet::report_activity,
         commands::dapp::dapp_request,
         commands::dapp::connect_dapp,
         commands::dapp::disconnect_dapp,
@@ -102,7 +103,7 @@ fn build_specta_invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> b
             )
             .expect("Failed to export TypeScript bindings");
     }
-    builder.invoke_handler()
+    builder
 }
 
 // ============================================================================
@@ -111,10 +112,15 @@ fn build_specta_invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> b
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let specta_builder = build_specta_builder();
+    let invoke_handler = specta_builder.invoke_handler();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(build_specta_invoke_handler())
-        .setup(|app| {
+        .invoke_handler(invoke_handler)
+        .setup(move |app| {
+            // Required for typed events (e.g. RefreshBalanceEvent) to be emitted without panic
+            specta_builder.mount_events(app);
             // Setup window (golden ratio, 80% screen height)
             if let Some(window) = app.get_webview_window("main") {
                 if let Ok(Some(monitor)) = window.primary_monitor() {

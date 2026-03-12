@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Routes, Route, useNavigate } from "react-router-dom";
-import { WalletService } from "./services/tauri";
+import { WalletService, ActivityService } from "./services/tauri";
 import Unlock from "./pages/Unlock";
 import Onboarding from "./pages/Onboarding";
 import Dashboard from "./pages/Dashboard";
@@ -49,6 +49,18 @@ function Home() {
 }
 
 function App() {
+  useEffect(() => {
+    const report = () => ActivityService.reportActivity();
+    window.addEventListener("click", report);
+    window.addEventListener("keydown", report);
+    window.addEventListener("focus", report);
+    return () => {
+      window.removeEventListener("click", report);
+      window.removeEventListener("keydown", report);
+      window.removeEventListener("focus", report);
+    };
+  }, []);
+
   return (
     <Routes>
       <Route path="/" element={<Home />} />

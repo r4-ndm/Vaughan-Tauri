@@ -60,6 +60,7 @@ use crate::error::WalletError;
 use alloy::primitives::Address;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 
@@ -115,6 +116,9 @@ pub struct VaughanState {
     /// Used by BalanceWatcher to optimize polling.
     pub focused_asset: Mutex<Option<String>>,
 
+    /// Last user activity (click/key/focus). Balance watcher backs off when idle.
+    pub last_activity: Mutex<Instant>,
+
     /// State persistence manager
     state_manager: StateManager,
 }
@@ -169,6 +173,9 @@ impl VaughanState {
 
             // Audio service
             sound_player: crate::audio::SoundPlayer::new(crate::audio::SoundConfig::default()),
+
+            // Activity-based polling: start in "active" mode (3s) until idle
+            last_activity: Mutex::new(Instant::now()),
 
             // State persistence
             state_manager,

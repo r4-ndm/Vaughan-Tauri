@@ -656,3 +656,12 @@ pub async fn set_focused_asset(
     *focused = Some(asset);
     Ok(())
 }
+
+/// Report user activity (click, keydown, focus). Balance watcher uses this to
+/// poll at 3s when active and back off to 5/10/30s when idle.
+#[tauri::command]
+#[specta::specta]
+pub async fn report_activity(state: State<'_, VaughanState>) -> Result<(), ()> {
+    *state.last_activity.lock().await = std::time::Instant::now();
+    Ok(())
+}

@@ -21,21 +21,27 @@ use crate::state::VaughanState;
 #[derive(Debug, Clone, Serialize, Deserialize, Type, tauri_specta::Event)]
 pub struct RefreshBalanceEvent;
 
+/// Activity-based poll intervals: after user activity poll every 3s, then back off.
+const ACTIVE_SECS: u64 = 120;   // <2 min → 3s
+const IDLE_MED_SECS: u64 = 300; // 2–5 min → 5s
+const IDLE_LONG_SECS: u64 = 600; // 5–10 min → 10s
+// >10 min → 30s
+
 /// Spawn the background balance watcher task.
 ///
-/// This polls every 10 seconds for balance changes of the *focused* asset.
-/// When a balance increases, it plays a sound and signals the UI to refresh.
+/// Polls the focused asset; interval is activity-based: 3s when active (click/key/focus),
+/// then 5s, 10s, 30s as idle time increases.
 pub fn spawn(app_handle: AppHandle) {
     tauri::async_runtime::spawn(async move {
-        info!("[BalanceWatcher] Started — polling every 10s");
-        let mut interval = tokio::time::interval(Duration::from_secs(10));
+        info!("[BalanceWatcher] Started — activity-based polling (3s when active, back off to 5/10/30s when idle)");
+        let mut sleep_duration = Duration::from_secs(3);
         let mut last_balance: Option<U256> = None;
         let mut last_token_balances: HashMap<Address, U256> = HashMap::new();
         let mut last_account: Option<Address> = None;
         let mut last_chain_id: Option<u64> = None;
 
         loop {
-            interval.tick().await;
+            tokio::time::sleep(sleep_duration).await;
 
             let state = app_handle.state::<VaughanState>();
 
@@ -89,10 +95,10 @@ pub fn spawn(app_handle: AppHandle) {
                     let balance = U256::from_str_radix(&bal.raw, 10).unwrap_or_default();
                     if let Some(prev) = last_balance {
                         if balance > prev {
-                            info!("[BalanceWatcher] Native incoming detected: {} -> {}", prev, balance);
                             if let Err(e) = state.sound_player.play(audio::AlertSound::CoinDrop) {
                                 warn!("[BalanceWatcher] Sound error: {}", e);
                             }
+                            info!("[BalanceWatcher] Native incoming detected: {} -> {}", prev, balance);
                             let _ = RefreshBalanceEvent.emit(&app_handle);
                         }
                     } else {
@@ -101,15 +107,15 @@ pub fn spawn(app_handle: AppHandle) {
                     last_balance = Some(balance);
                 }
             } else if let Ok(token_addr) = focused.parse::<Address>() {
-                // Poll specific token
+                // Poll specific token (custom/tracked token e.g. tDAI)
                 if let Ok(bal) = adapter.get_token_balance(&token_addr.to_string(), &account.to_string()).await {
                     let balance = U256::from_str_radix(&bal.raw, 10).unwrap_or_default();
                     if let Some(prev) = last_token_balances.get(&token_addr) {
                         if balance > *prev {
-                            info!("[BalanceWatcher] Token incoming ({:?}): {} -> {}", token_addr, prev, balance);
                             if let Err(e) = state.sound_player.play(audio::AlertSound::CoinDrop) {
                                 warn!("[BalanceWatcher] Sound error: {}", e);
                             }
+                            info!("[BalanceWatcher] Token incoming ({:?}): {} -> {}", token_addr, prev, balance);
                             let _ = RefreshBalanceEvent.emit(&app_handle);
                         }
                     } else {
@@ -118,6 +124,19 @@ pub fn spawn(app_handle: AppHandle) {
                     last_token_balances.insert(token_addr, balance);
                 }
             }
+
+            // Next poll: activity-based back-off (3 → 5 → 10 → 30s)
+            let last = *state.last_activity.lock().await;
+            let elapsed = last.elapsed().as_secs();
+            sleep_duration = if elapsed < ACTIVE_SECS {
+                Duration::from_secs(3)
+            } else if elapsed < IDLE_MED_SECS {
+                Duration::from_secs(5)
+            } else if elapsed < IDLE_LONG_SECS {
+                Duration::from_secs(10)
+            } else {
+                Duration::from_secs(30)
+            };
         }
     });
 }
