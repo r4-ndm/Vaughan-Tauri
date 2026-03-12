@@ -10,7 +10,7 @@ use specta::Type;
 use tauri_specta::Event;
 use std::collections::HashMap;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use tracing::{debug, info, warn};
 
 use crate::audio;
