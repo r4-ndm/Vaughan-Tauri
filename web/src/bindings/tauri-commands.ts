@@ -404,7 +404,7 @@ async sendTransaction(request: SendTransactionRequest) : Promise<Result<Transact
  * console.log('BACKUP THIS MNEMONIC:', mnemonic);
  * ```
  */
-async createWallet(password: string, wordCount: string) : Promise<Result<string, WalletError>> {
+async createWallet(password: string, wordCount: number) : Promise<Result<string, WalletError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("create_wallet", { password, wordCount }) };
 } catch (e) {

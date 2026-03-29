@@ -14,6 +14,23 @@ export default function Unlock() {
 
     const navigate = useNavigate();
 
+    const handleStartFresh = async () => {
+        if (
+            !window.confirm(
+                "This removes the wallet stored on this device (keychain + app data). You can only recover funds with your recovery phrase. Continue?"
+            )
+        ) {
+            return;
+        }
+        try {
+            await WalletService.resetState();
+            navigate("/onboarding", { replace: true });
+        } catch (e) {
+            console.error("Start fresh failed:", e);
+            setError("Could not reset wallet. Try again or reinstall the app.");
+        }
+    };
+
     // Fetch preferences on load to see what to default the toggle to
     useEffect(() => {
         PreferencesService.getUserPreferences()
@@ -128,6 +145,17 @@ export default function Unlock() {
                         {loading ? "Unlocking..." : "Unlock Wallet"}
                     </button>
                 </form>
+
+                <p className="mt-6 text-center text-xs text-muted-foreground leading-relaxed">
+                    Never set up Vaughan on this device but you see unlock? A previous install may have left data.{" "}
+                    <button
+                        type="button"
+                        onClick={handleStartFresh}
+                        className="text-primary underline underline-offset-2 hover:text-primary/90"
+                    >
+                        Start fresh and create a wallet
+                    </button>
+                </p>
             </div>
         </div>
     );

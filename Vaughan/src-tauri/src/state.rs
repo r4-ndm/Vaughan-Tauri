@@ -64,6 +64,30 @@ use std::time::Instant;
 use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 
+/// Maps chain ID + optional user-defined networks to the adapter’s native currency metadata.
+fn resolve_chain_native_token_for_adapter(
+    chain_id: u64,
+    custom_networks: &[crate::core::NetworkConfig],
+) -> crate::chains::types::TokenInfo {
+    use crate::chains::evm::networks::get_network_by_chain_id;
+    use crate::chains::types::TokenInfo;
+    if let Some(net) = get_network_by_chain_id(chain_id) {
+        return TokenInfo::native(
+            net.native_symbol.clone(),
+            net.native_name.clone(),
+            net.decimals,
+        );
+    }
+    if let Some(cfg) = custom_networks.iter().find(|n| n.chain_id == chain_id) {
+        return TokenInfo::native(
+            cfg.native_token.symbol.clone(),
+            cfg.native_token.name.clone(),
+            cfg.native_token.decimals,
+        );
+    }
+    TokenInfo::native("NATIVE".into(), format!("Chain {}", chain_id), 18)
+}
+
 pub struct VaughanState {
     // ===== PROVIDER-INDEPENDENT SERVICES (Always Available) =====
     /// Transaction service (stateless, always available)
@@ -247,12 +271,15 @@ impl VaughanState {
         chain_id: u64,
     ) -> Result<(), WalletError> {
         debug!("[VaughanState] switch_network: {}", network_id);
+        let custom_networks = self.state_manager.load().custom_networks.clone();
+        let native_token = resolve_chain_native_token_for_adapter(chain_id, &custom_networks);
         // Get or create EVM adapter
         let mut adapters = self.evm_adapters.lock().await;
 
         if !adapters.contains_key(network_id) {
             // Create new adapter
-            let adapter = EvmAdapter::new(rpc_url, network_id.to_string(), chain_id).await?;
+            let adapter =
+                EvmAdapter::new(rpc_url, network_id.to_string(), chain_id, native_token).await?;
             adapters.insert(network_id.to_string(), Arc::new(adapter));
         }
         let _adapter_count = adapters.len();
@@ -292,8 +319,13 @@ impl VaughanState {
         let mut adapters = self.evm_adapters.lock().await;
 
         if !adapters.contains_key(&config.id) {
-            // Create new adapter
-            let adapter = EvmAdapter::new(&config.rpc_url, config.id.clone(), chain_id).await?;
+            let native_token = crate::chains::types::TokenInfo::native(
+                config.native_token.symbol.clone(),
+                config.native_token.name.clone(),
+                config.native_token.decimals,
+            );
+            let adapter =
+                EvmAdapter::new(&config.rpc_url, config.id.clone(), chain_id, native_token).await?;
             adapters.insert(config.id.clone(), Arc::new(adapter));
         }
 

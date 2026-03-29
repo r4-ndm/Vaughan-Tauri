@@ -292,6 +292,8 @@ impl WalletService {
         signers.clear();
         let mut accounts = self.accounts.write().await;
         accounts.clear();
+        let mut pass = self.passphrase_hash.write().await;
+        *pass = None;
         let _ = self.keyring.delete_key("vaughan_seed");
         Ok(())
     }

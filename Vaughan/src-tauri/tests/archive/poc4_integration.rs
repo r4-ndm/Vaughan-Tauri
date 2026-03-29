@@ -35,7 +35,13 @@ use vaughan_lib::chains::ChainAdapter;
 #[tokio::test]
 #[ignore] // Requires network access
 async fn poc1_alloy_provider_connects() {
-    let adapter = EvmAdapter::new("https://eth.llamarpc.com", "ethereum".to_string(), 1)
+    let net = get_network_by_chain_id(1).expect("ethereum mainnet");
+    let native = TokenInfo::native(
+        net.native_symbol.clone(),
+        net.native_name.clone(),
+        net.decimals,
+    );
+    let adapter = EvmAdapter::new("https://eth.llamarpc.com", "ethereum".to_string(), 1, native)
         .await
         .expect("Failed to create EvmAdapter");
 

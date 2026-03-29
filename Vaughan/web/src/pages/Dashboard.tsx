@@ -199,7 +199,11 @@ export default function Dashboard() {
 
 
     const displayBalance = isShieldMode ? "0.00" : formatBalance(balance?.balance_eth);
-    const displaySymbol = isShieldMode ? `${balance?.symbol || "ETH"} (zk)` : balance?.symbol || "ETH";
+    const nativeCurrencySymbol =
+        network?.native_token?.symbol ?? balance?.symbol ?? "ETH";
+    const displaySymbol = isShieldMode
+        ? `${nativeCurrencySymbol} (zk)`
+        : nativeCurrencySymbol;
 
     const handleGlobalRefresh = () => {
         // Manual refresh hook: any click in the main dashboard area will

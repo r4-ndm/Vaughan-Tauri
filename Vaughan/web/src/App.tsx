@@ -12,37 +12,40 @@ import { HistoryView } from "./views/HistoryView";
 
 function Home() {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const handleGetStarted = async () => {
-    setLoading(true);
-    try {
-      const exists = await WalletService.walletExists();
-      if (exists) {
-        navigate("/unlock");
-      } else {
-        navigate("/onboarding");
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const exists = await WalletService.walletExists();
+        if (!cancelled) {
+          navigate(exists ? "/unlock" : "/onboarding", { replace: true });
+        }
+      } catch (error) {
+        console.error("Failed to check wallet:", error);
+        if (!cancelled) {
+          navigate("/onboarding", { replace: true });
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
-    } catch (error) {
-      console.error("Failed to check wallet:", error);
-      navigate("/onboarding");
-    } finally {
-      setLoading(false);
-    }
-  };
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate]);
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center p-4">
       <img src="/vaughan-logo.png" alt="VAUGHAN" className="w-full max-w-md mb-8 select-none" draggable={false} />
       <div className="bg-card p-6 border border-border max-w-sm w-full">
         <p className="text-muted-foreground text-center mb-6">Secure, Fast, Private.</p>
-        <button
-          onClick={handleGetStarted}
-          disabled={loading}
-          className="w-full vaughan-btn text-center disabled:opacity-50"
-        >
-          {loading ? "Checking..." : "Get Started"}
-        </button>
+        <p className="text-center text-sm text-muted-foreground">
+          {loading ? "Checking wallet…" : "Redirecting…"}
+        </p>
       </div>
     </div>
   );

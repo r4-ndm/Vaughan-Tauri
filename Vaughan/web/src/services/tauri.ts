@@ -205,7 +205,7 @@ export const WalletService = {
   },
 
   async createWallet(password: string, wordCount: 12 | 24): Promise<string> {
-    return unwrap(await commands.createWallet(password, String(wordCount)));
+    return unwrap(await commands.createWallet(password, wordCount));
   },
 
   async importWallet(mnemonic: string, password: string, accountCount: number): Promise<string[]> {

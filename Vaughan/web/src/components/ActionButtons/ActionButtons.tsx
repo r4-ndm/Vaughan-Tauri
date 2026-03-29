@@ -122,8 +122,20 @@ export function CreateWalletModal({ onClose }: { onClose: () => void }) {
             const phrase = await WalletService.createWallet(password, wordCount);
             setMnemonic(phrase);
             setStep('phrase');
-        } catch (e: any) {
-            setError(typeof e === 'string' ? e : JSON.stringify(e));
+        } catch (e: unknown) {
+            const msg =
+                e instanceof Error
+                    ? e.message
+                    : typeof e === 'string'
+                      ? e
+                      : (() => {
+                            try {
+                                return JSON.stringify(e);
+                            } catch {
+                                return 'Something went wrong. Check the developer console for details.';
+                            }
+                        })();
+            setError(msg || 'Something went wrong. Check the developer console for details.');
         } finally {
             setLoading(false);
         }
